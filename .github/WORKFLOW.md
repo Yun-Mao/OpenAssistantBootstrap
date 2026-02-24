@@ -6,13 +6,13 @@
 
 ```bash
 # 1️⃣ 创建feature分支
-./scripts/git-workflow.sh start feat/your-feature-name
+./.github/git-workflow.sh start feat/your-feature-name
 
 # 2️⃣ 开发完成后提交到远端
-./scripts/git-workflow.sh submit "Your feature description"
+./.github/git-workflow.sh submit "Your feature description"
 
 # 3️⃣ PR合并后进行清理
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 ```
 
 ## 📖 详细工作流
@@ -23,7 +23,7 @@
 # 假设要添加Python安装工具支持
 
 # 步骤1: 创建feature分支
-./scripts/git-workflow.sh start feat/python-installer
+./.github/git-workflow.sh start feat/python-installer
 
 # 步骤2: 进行开发工作
 # - 编写代码
@@ -39,12 +39,12 @@ git add docs/python/
 git commit -m "docs: add Python installation documentation"
 
 # 步骤3: 提交到远端并发起PR
-./scripts/git-workflow.sh submit "Add Python offline installation tool"
+./.github/git-workflow.sh submit "Add Python offline installer"
 
 # 步骤4: 在GitHub上review和merge PR
 
 # 步骤5: 清理本地分支
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 ```
 
 ## 🎯 提交规范（Conventional Commits）
@@ -128,7 +128,7 @@ chore/task-name          # 构建/工具相关分支
 ### 1. 创建feature分支
 
 ```bash
-./scripts/git-workflow.sh start feat/your-feature
+./.github/git-workflow.sh start feat/your-feature
 
 # 脚本执行:
 # ✓ 更新本地main分支
@@ -139,7 +139,7 @@ chore/task-name          # 构建/工具相关分支
 ### 2. 提交代码到远端
 
 ```bash
-./scripts/git-workflow.sh submit "Feature description"
+./.github/git-workflow.sh submit "Feature description"
 
 # 脚本执行:
 # ✓ 检查当前分支不是main
@@ -150,7 +150,7 @@ chore/task-name          # 构建/工具相关分支
 ### 3. 合并后清理
 
 ```bash
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 
 # 脚本执行:
 # ✓ 切换到main分支
@@ -165,7 +165,7 @@ chore/task-name          # 构建/工具相关分支
 
 ```bash
 # 创建分支
-./scripts/git-workflow.sh start feat/new-tool
+./.github/git-workflow.sh start feat/new-tool
 
 # ... 进行开发和多次提交 ...
 git commit -m "feat: implement new tool"
@@ -173,19 +173,19 @@ git commit -m "docs: add documentation"
 git commit -m "test: add unit tests"
 
 # 提交到远端
-./scripts/git-workflow.sh submit "Implement new tool with documentation"
+./.github/git-workflow.sh submit "Implement new tool with documentation"
 
 # ... 在GitHub完成review和merge ...
 
 # 清理
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 ```
 
 ### 场景2: 快速bug修复
 
 ```bash
 # 创建fix分支
-./scripts/git-workflow.sh start fix/path-issue
+./.github/git-workflow.sh start fix/path-issue
 
 # 修复bug并提交
 git commit -m "fix: resolve PATH variable issue
@@ -194,27 +194,27 @@ git commit -m "fix: resolve PATH variable issue
 - Handle whitespace in directory names"
 
 # 推送PR
-./scripts/git-workflow.sh submit "Fix PATH variable handling"
+./.github/git-workflow.sh submit "Fix PATH variable handling"
 
 # ... review和merge ...
 
 # 清理
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 ```
 
 ### 场景3: 文档更新
 
 ```bash
-./scripts/git-workflow.sh start docs/installation-guide
+./.github/git-workflow.sh start docs/installation-guide
 
 git add docs/
 git commit -m "docs: improve installation guide with examples"
 
-./scripts/git-workflow.sh submit "Improve documentation clarity"
+./.github/git-workflow.sh submit "Improve documentation clarity"
 
 # ... review和merge ...
 
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 ```
 
 ## 📊 提交历史规范
@@ -318,11 +318,11 @@ git branch
 或者：
 
 ```
-"git-workflow start feat/python-installer"
+".github/git-workflow.sh start feat/python-installer"
 "...开发中..."
-"git-workflow submit Add Python support"
+".github/git-workflow.sh submit Add Python support"
 "...PR已合并..."
-"git-workflow finalize"
+".github/git-workflow.sh finalize"
 ```
 
 我就会自动执行整个工作流，无需解释细节！🚀

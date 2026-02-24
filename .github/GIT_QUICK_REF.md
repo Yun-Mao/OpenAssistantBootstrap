@@ -3,28 +3,28 @@
 ## 一句话总结
 ```bash
 # 开始 → 开发 → 提交 → 审核 → 合并 → 清理
-./git-workflow.sh start feat/name
+./.github/git-workflow.sh start feat/name
 git commit -m "feat: ..."
-./git-workflow.sh submit "Description"
+./.github/git-workflow.sh submit "Description"
 # [PR审核合并]
-./git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 ```
 
 ## 常用命令
 
 ### 创建feature分支
 ```bash
-./scripts/git-workflow.sh start feat/your-feature-name
+./.github/git-workflow.sh start feat/your-feature-name
 ```
 
 ### 提交代码到远端
 ```bash
-./scripts/git-workflow.sh submit "Your feature description"
+./.github/git-workflow.sh submit "Your feature description"
 ```
 
 ### 合并后清理
 ```bash
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh finalize
 ```
 
 ## 提交消息格式
@@ -60,11 +60,11 @@ git commit -m "refactor: improve code structure"
 
 | 需求 | 命令 |
 |------|------|
-| 创建feature分支 | `./git-workflow.sh start feat/name` |
-| 推送到远端 | `./git-workflow.sh submit "desc"` |
-| PR合并后清理 | `./git-workflow.sh finalize` |
-| 查看帮助 | `./git-workflow.sh --help` |
-| 查看完整文档 | `cat WORKFLOW.md` |
+| 创建feature分支 | `./.github/git-workflow.sh start feat/name` |
+| 推送到远端 | `./.github/git-workflow.sh submit "desc"` |
+| PR合并后清理 | `./.github/git-workflow.sh finalize` |
+| 查看帮助 | `./.github/git-workflow.sh --help` |
+| 查看完整文档 | `cat .github/WORKFLOW.md` |
 
 ## 下次告诉我
 
