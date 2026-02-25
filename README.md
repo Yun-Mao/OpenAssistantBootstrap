@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-这是一个为 OpenAssistant 项目提供多工具环境离线安装的工具集合。支持无 root 权限安装，交互式配置，以及自定义安装路径。目前支持 **Node.js** 安装，后续将继续扩展支持更多开发工具。
+这是一个为 OpenAssistant 项目提供多工具环境离线安装的工具集合。支持无 root 权限安装，交互式配置，以及自定义安装路径。目前支持 **Node.js** 和 **Claude Code** 安装，后续将继续扩展支持更多开发工具。
 
 ## 项目特点
 
@@ -21,11 +21,17 @@
 .
 ├── scripts/                          # 安装脚本目录
 │   ├── install_nodejs.sh            # Node.js 安装脚本
+│   ├── fetch_claude_code.sh         # Claude Code 离线包获取脚本
+│   ├── install_claude_code.sh       # Claude Code 安装脚本
 │   └── ...                          # 其他工具安装脚本（后续添加）
 ├── packages/                        # 离线包目录
 │   └── README.md                   # 放置压缩包说明
 ├── docs/                            # 文档目录
 │   ├── nodejs/                      # Node.js 相关文档
+│   │   ├── INSTALL_GUIDE.md        # 详细安装指南
+│   │   ├── INTERACTIVE_INSTALL.md  # 交互式安装指南
+│   │   └── QUICK_REFERENCE.md      # 快速参考卡
+│   ├── claude_code/                 # Claude Code 相关文档
 │   │   ├── INSTALL_GUIDE.md        # 详细安装指南
 │   │   ├── INTERACTIVE_INSTALL.md  # 交互式安装指南
 │   │   └── QUICK_REFERENCE.md      # 快速参考卡
@@ -39,6 +45,13 @@
 
 - 📍 **文档位置**: [docs/nodejs/](docs/nodejs/)
 - 🔧 **安装脚本**: `scripts/install_nodejs.sh`
+
+### Claude Code
+
+- 📍 **文档位置**: [docs/claude_code/](docs/claude_code/)
+- 🔧 **获取离线包**: `scripts/fetch_claude_code.sh`（在有网机器上运行）
+- 🔧 **安装脚本**: `scripts/install_claude_code.sh`
+- 💡 **特点**: 官方预编译独立二进制，无需 Node.js
 
 ## 快速开始
 
@@ -106,11 +119,49 @@ node --version
 npm --version
 ```
 
+### Claude Code 安装
+
+Claude Code 使用官方预编译独立二进制，**无需 Node.js**，分两步完成。
+
+#### 1. 在有网络的机器上获取离线包
+
+```bash
+chmod +x scripts/fetch_claude_code.sh
+./scripts/fetch_claude_code.sh
+```
+
+脚本会交互式选择目标平台（CentOS 7 选 `linux-x64`）和版本，下载后输出：
+
+```
+packages/claude-code-v2.1.56-linux-x64.tar.gz
+```
+
+将此文件复制到离线机器的 `packages/` 目录。
+
+#### 2. 在离线机器上安装
+
+```bash
+chmod +x scripts/install_claude_code.sh
+./scripts/install_claude_code.sh
+```
+
+#### 3. 验证安装
+
+```bash
+source ~/.bashrc
+claude --version
+```
+
+详见 [Claude Code 安装指南](docs/claude_code/INSTALL_GUIDE.md)
+
 ## 文档
 
 - [Node.js 详细安装指南](docs/nodejs/INSTALL_GUIDE.md)
 - [Node.js 交互式安装指南](docs/nodejs/INTERACTIVE_INSTALL.md)
 - [Node.js 快速参考](docs/nodejs/QUICK_REFERENCE.md)
+- [Claude Code 详细安装指南](docs/claude_code/INSTALL_GUIDE.md)
+- [Claude Code 交互式安装指南](docs/claude_code/INTERACTIVE_INSTALL.md)
+- [Claude Code 快速参考](docs/claude_code/QUICK_REFERENCE.md)
 
 ## 命令参考
 
@@ -122,10 +173,22 @@ npm --version
 
 脚本会交互式询问安装路径、现有版本检测和压缩包位置。所有参数均通过对话框输入。
 
+### 运行 Claude Code 脚本
+
+```bash
+# 有网机器：获取离线包
+./scripts/fetch_claude_code.sh
+
+# 离线机器：安装
+./scripts/install_claude_code.sh
+```
+
 ### 显示帮助
 
 ```bash
 ./scripts/install_nodejs.sh --help
+./scripts/fetch_claude_code.sh --help
+./scripts/install_claude_code.sh --help
 ```
 
 显示脚本使用说明和功能介绍。
@@ -146,6 +209,33 @@ npm --version
 - 智能默认值（路径：$HOME/nodejs）
 - 自动包检测
 - 安装后自动显示版本号和配置提示
+
+### fetch_claude_code.sh
+
+**功能：**
+- 自动检测当前机器平台或交互式选择目标平台
+- 查询并下载指定版本或最新版官方二进制
+- SHA256 校验和验证
+- 打包为标准 tar.gz 离线安装包
+
+**核心特性：**
+- 无需 Node.js 或 npm
+- 支持 6 种平台（linux-x64/arm64/musl、darwin-x64/arm64）
+- 输出命名清晰（含版本和平台信息）
+
+### install_claude_code.sh
+
+**功能：**
+- 检测本地现有 Claude Code 安装
+- 交互式输入安装路径和离线包路径
+- 自动在 packages/ 目录查找并识别安装包
+- 安装官方预编译独立二进制
+
+**核心特性：**
+- 纯交互式，无命令行参数输入
+- 无需 Node.js，独立二进制直接运行
+- 智能默认值（路径：$HOME/claude-code）
+- 自动包检测（优先最新版）
 
 ## 扩展性设计
 

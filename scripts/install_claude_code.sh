@@ -1,0 +1,662 @@
+#!/bin/bash
+
+################################################################################
+# Claude Code 离线安装脚本 - CentOS 7 / Linux
+# 功能：自定义路径安装、交互式输入、现有版本检测
+# 无需 Node.js —— Claude Code 官方提供独立预编译二进制
+# 使用: ./install_claude_code.sh
+################################################################################
+
+set -e
+
+# ==================== 颜色定义 ====================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# ==================== 配置变量 ====================
+INSTALL_PATH=""
+PKG_PATH=""
+LOG_FILE="/tmp/claude_code_install_$(date +%s).log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PKG_DIR="${SCRIPT_DIR}/../packages"
+INSTALL_RECORD="$HOME/.claude_code_install_record"
+
+# ==================== 工具函数 ====================
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+confirm_action() {
+    local prompt="$1"
+    read -p "  $(echo -e "${YELLOW}")${prompt}$(echo -e "${NC}") (y/N): " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]]
+}
+
+show_usage() {
+    cat << EOF
+${BLUE}=== Claude Code 离线安装脚本 ===${NC}
+
+用法:
+  ./install_claude_code.sh
+
+描述:
+  纯交互式安装脚本，将指引您完成 Claude Code 离线安装过程。
+  无需 root 权限，无需 Node.js，使用官方预编译二进制。
+
+功能:
+  • 检测本地已有的 Claude Code 安装
+  • 交互式输入自定义安装路径
+  • 自动识别 packages/ 目录中的离线安装包
+  • 无需 root 权限，完全用户级别安装
+
+示例:
+  ./install_claude_code.sh
+
+EOF
+}
+
+# ==================== 现有版本检测 ====================
+check_existing_claude() {
+    if command -v claude &>/dev/null; then
+        claude_version=$(claude --version 2>/dev/null | head -1 || echo "未知版本")
+        claude_path=$(which claude)
+        return 0
+    fi
+
+    # 检查安装记录
+    if [ -f "$INSTALL_RECORD" ]; then
+        local recorded_path
+        recorded_path=$(cat "$INSTALL_RECORD")
+        if [ -x "${recorded_path}/bin/claude" ]; then
+            claude_version=$("${recorded_path}/bin/claude" --version 2>/dev/null | head -1 || echo "未知版本")
+            claude_path="${recorded_path}/bin/claude"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# ==================== 交互式输入函数 ====================
+# 步骤 1: 询问是否已有安装
+prompt_existing_install() {
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 1: 检测现有 Claude Code 安装 │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    if check_existing_claude; then
+        log_success "检测到现有 Claude Code 安装"
+        echo -e "  ${YELLOW}版本:${NC} $claude_version"
+        echo -e "  ${YELLOW}路径:${NC} $claude_path"
+        echo ""
+
+        if confirm_action "是否继续安装新版本?"; then
+            return 0
+        else
+            log_warn "安装已取消"
+            return 1
+        fi
+    else
+        log_info "未检测到现有 Claude Code 安装"
+        echo ""
+        if ! confirm_action "继续安装?"; then
+            log_warn "安装已取消"
+            return 1
+        fi
+        return 0
+    fi
+}
+
+# 步骤 2: 交互式输入安装路径
+prompt_install_path() {
+    local default_path="$HOME/claude-code"
+    local user_input=""
+
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 2: 选择安装路径              │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "  ${YELLOW}默认路径:${NC} $default_path"
+    read -p "  输入安装路径（直接回车使用默认）: " user_input
+
+    if [ -z "$user_input" ]; then
+        INSTALL_PATH="$default_path"
+        log_info "使用默认安装路径: $INSTALL_PATH"
+    else
+        INSTALL_PATH="$user_input"
+        log_info "使用自定义安装路径: $INSTALL_PATH"
+    fi
+
+    INSTALL_PATH="${INSTALL_PATH/#\~/$HOME}"
+}
+
+# 步骤 3: 交互式选择离线包
+prompt_package_path() {
+    local default_pkg=""
+    local user_input=""
+
+    # 在 packages 目录下查找 claude-code 离线包（优先最新）
+    if [ -d "$DEFAULT_PKG_DIR" ]; then
+        default_pkg=$(find "$DEFAULT_PKG_DIR" -maxdepth 2 -type f -name "claude-code-*.tar.gz" 2>/dev/null | sort -r | head -1)
+    fi
+
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 3: 选择离线安装包            │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    if [ -n "$default_pkg" ]; then
+        echo -e "  ${YELLOW}找到离线安装包:${NC}"
+        echo "    $(basename "$default_pkg")"
+        read -p "  使用此文件? (Y/n): " -n 1 -r user_input
+        echo
+
+        if [[ -z "$user_input" || "$user_input" =~ ^[Yy]$ ]]; then
+            PKG_PATH="$default_pkg"
+            log_info "使用离线安装包: $(basename "$default_pkg")"
+            return 0
+        fi
+    fi
+
+    echo -e "  ${YELLOW}默认目录:${NC} $DEFAULT_PKG_DIR"
+    echo -e "  ${YELLOW}提示:${NC} 请先在有网络的机器上运行 fetch_claude_code.sh 获取离线包"
+    read -p "  输入离线包路径: " user_input
+
+    if [ -z "$user_input" ]; then
+        log_error "必须指定离线包路径"
+        return 1
+    else
+        PKG_PATH="$user_input"
+        log_info "使用离线包: $PKG_PATH"
+    fi
+
+    PKG_PATH="${PKG_PATH/#\~/$HOME}"
+}
+
+# 步骤 4: 确认安装信息
+confirm_installation_info() {
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 4: 确认安装信息              │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "  ${YELLOW}源包:${NC}     $PKG_PATH"
+    echo -e "  ${YELLOW}目标路径:${NC} $INSTALL_PATH"
+    echo ""
+
+    if ! confirm_action "确认开始安装?"; then
+        log_warn "安装已取消"
+        return 1
+    fi
+
+    return 0
+}
+
+# ==================== 卸载功能 ====================
+uninstall_claude_code() {
+    echo ""
+    echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║  Claude Code 卸载 - 交互式模式    ║${NC}"
+    echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+    echo ""
+
+    if [ ! -f "$INSTALL_RECORD" ]; then
+        log_error "未找到安装记录文件: $INSTALL_RECORD"
+        log_error "无法验证是否通过本脚本安装"
+        return 1
+    fi
+
+    INSTALL_PATH=$(cat "$INSTALL_RECORD")
+
+    if [ ! -d "$INSTALL_PATH" ]; then
+        log_error "安装路径不存在: $INSTALL_PATH"
+        return 1
+    fi
+
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  检测到安装信息                    │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "  ${YELLOW}安装路径:${NC} $INSTALL_PATH"
+
+    if ! confirm_action "确认卸载此安装?"; then
+        log_warn "卸载已取消"
+        return 1
+    fi
+
+    log_info "开始卸载..."
+
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  删除 Claude Code 文件             │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    if [ -d "$INSTALL_PATH" ]; then
+        # 安全校验：禁止删除根目录或家目录
+        if [[ "$INSTALL_PATH" == "/" || "$INSTALL_PATH" == "$HOME" ]]; then
+            log_error "安全校验失败：不允许删除根目录或家目录 ($INSTALL_PATH)，已中止卸载"
+            return 1
+        fi
+
+        # 结构校验：检查是否为 claude-code 安装目录
+        if [ ! -x "$INSTALL_PATH/bin/claude" ]; then
+            log_warn "安全提示：路径 '$INSTALL_PATH' 下未找到可执行的 bin/claude，看起来不像是 Claude Code 安装目录。"
+            if ! confirm_action "仍然要删除该目录吗? 这可能删除与 Claude Code 无关的文件"; then
+                log_error "卸载已取消"
+                return 1
+            fi
+        fi
+
+        log_info "删除目录: $INSTALL_PATH"
+        rm -rf "$INSTALL_PATH"
+        log_success "目录已删除"
+    fi
+
+    # 删除环境变量配置
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  删除环境变量配置                  │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    local bash_config="$HOME/.bashrc"
+    local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+
+    if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
+        log_info "检测到环境变量配置，正在删除..."
+
+        local start_line end_line
+        start_line=$(grep -nF "$start_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
+        end_line=$(grep -nF "$end_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
+
+        if [[ -n "$start_line" && -n "$end_line" && "$end_line" -ge "$start_line" ]]; then
+            sed -i "${start_line},${end_line}d" "$bash_config"
+            sed -i '/^$/N;/^\n$/D' "$bash_config"
+            log_success "环境变量配置已删除"
+            echo ""
+            echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+            echo "  source ~/.bashrc"
+        else
+            log_info "未找到完整的环境变量标记块，跳过自动删除"
+        fi
+    else
+        log_info "未找到自动配置的环境变量"
+        echo ""
+        echo -e "${YELLOW}提示:${NC} 如果您手动配置了环境变量，请手动删除:"
+        echo "  编辑 ~/.bashrc，移除包含 '$INSTALL_PATH' 的 PATH 配置行"
+    fi
+
+    echo ""
+    log_info "删除安装记录..."
+    rm -f "$INSTALL_RECORD"
+
+    echo ""
+    log_success "Claude Code 卸载完成!"
+}
+
+# ==================== 更新配置功能 ====================
+update_config() {
+    echo ""
+    echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║  Claude Code 更新配置 - 交互式模式 ║${NC}"
+    echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+    echo ""
+
+    if [ ! -f "$INSTALL_RECORD" ]; then
+        log_error "未找到安装记录文件: $INSTALL_RECORD"
+        log_error "请先使用安装模式安装 Claude Code"
+        return 1
+    fi
+
+    INSTALL_PATH=$(cat "$INSTALL_RECORD")
+
+    if [ ! -d "$INSTALL_PATH" ]; then
+        log_error "安装路径不存在: $INSTALL_PATH"
+        log_error "请重新安装 Claude Code"
+        return 1
+    fi
+
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  检测到安装信息                    │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "  ${YELLOW}安装路径:${NC} $INSTALL_PATH"
+
+    local claude_bin="$INSTALL_PATH/bin/claude"
+    if [[ -x "$claude_bin" ]]; then
+        local ver
+        ver=$("$claude_bin" --version 2>/dev/null | head -1 || echo "未知版本")
+        echo -e "  ${YELLOW}版本:${NC} $ver"
+    else
+        echo -e "  ${YELLOW}警告:${NC} 未在 $claude_bin 找到可执行文件"
+    fi
+
+    if [ -f "$INSTALL_PATH/PLATFORM" ]; then
+        echo -e "  ${YELLOW}平台:${NC} $(cat "$INSTALL_PATH/PLATFORM")"
+    fi
+    echo ""
+
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  配置选项                         │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo "  1. 配置环境变量"
+    echo "  2. 显示完整安装信息"
+    echo "  0. 返回"
+    echo ""
+
+    read -p "  请选择操作 (0-2): " choice
+
+    case "$choice" in
+        1)
+            echo ""
+            local bash_config="$HOME/.bashrc"
+            local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+            if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
+                log_warn "环境变量已经配置过了"
+            elif confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+                configure_env_variables
+                echo -e "${YELLOW}请运行以下命令使配置生效:${NC}"
+                echo "  source ~/.bashrc"
+            fi
+            ;;
+        2)
+            show_install_info
+            ;;
+        0)
+            log_info "返回主菜单"
+            ;;
+        *)
+            log_error "无效选择"
+            return 1
+            ;;
+    esac
+}
+
+# ==================== 安装功能 ====================
+install_claude_code() {
+    if [ -z "$INSTALL_PATH" ]; then
+        log_error "必须指定安装路径"
+        return 1
+    fi
+
+    if [ -z "$PKG_PATH" ]; then
+        log_error "必须指定离线包路径"
+        return 1
+    fi
+
+    if [ ! -f "$PKG_PATH" ]; then
+        log_error "离线包不存在: $PKG_PATH"
+        return 1
+    fi
+
+    if ! confirm_installation_info; then
+        return 1
+    fi
+
+    log_info "开始安装 Claude Code..."
+
+    # ========== 步骤 5: 检查目标路径 ==========
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 5: 检查目标路径              │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    if [ -d "$INSTALL_PATH" ]; then
+        log_warn "安装路径已存在: $INSTALL_PATH"
+        if ! confirm_action "是否覆盖现有目录?"; then
+            log_warn "安装已取消"
+            return 1
+        fi
+        log_info "删除现有目录..."
+        rm -rf "$INSTALL_PATH"
+    fi
+
+    # ========== 步骤 6: 创建安装目录 ==========
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 6: 创建安装目录              │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    mkdir -p "$INSTALL_PATH"
+    log_success "已创建目录: $INSTALL_PATH"
+
+    # ========== 步骤 7: 解压文件 ==========
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 7: 解压离线安装包            │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    log_info "解压文件..."
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    trap "rm -rf '$temp_dir'" EXIT
+
+    case "$PKG_PATH" in
+        *.tar.gz)
+            tar -xzf "$PKG_PATH" -C "$temp_dir"
+            log_success "解压完成（tar.gz）"
+            ;;
+        *.tar.xz)
+            tar -xJf "$PKG_PATH" -C "$temp_dir"
+            log_success "解压完成（tar.xz）"
+            ;;
+        *.zip)
+            unzip -q "$PKG_PATH" -d "$temp_dir"
+            log_success "解压完成（zip）"
+            ;;
+        *)
+            log_error "不支持的压缩格式: $PKG_PATH"
+            return 1
+            ;;
+    esac
+
+    # ========== 步骤 8: 复制文件 ==========
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 8: 复制文件到目标路径        │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    local extracted_dir
+    extracted_dir=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d | head -1)
+    if [ -z "$extracted_dir" ]; then
+        log_error "无法找到解压后的目录"
+        return 1
+    fi
+
+    log_info "复制文件: $(basename "$extracted_dir") -> $INSTALL_PATH"
+    cp -r "$extracted_dir"/. "$INSTALL_PATH/"
+    log_success "文件复制完成"
+
+    # 验证核心二进制
+    if [ ! -f "$INSTALL_PATH/bin/claude" ]; then
+        log_error "错误: 未找到 bin/claude 文件"
+        log_error "请确认离线包由 fetch_claude_code.sh 生成"
+        return 1
+    fi
+
+    # ========== 步骤 9: 设置权限 ==========
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 9: 设置文件权限              │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    chmod 755 "$INSTALL_PATH/bin/claude"
+    log_success "权限设置完成"
+
+    log_success "Claude Code 安装成功!"
+
+    # 保存安装记录
+    echo "$INSTALL_PATH" > "$INSTALL_RECORD"
+    log_info "安装记录已保存到: $INSTALL_RECORD"
+
+    show_install_info
+}
+
+# 配置环境变量到 bashrc
+configure_env_variables() {
+    local bash_config="$HOME/.bashrc"
+    local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local env_line="export PATH=\"$INSTALL_PATH/bin:\$PATH\""
+
+    if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
+        log_warn "环境变量已配置，跳过"
+        return 0
+    fi
+
+    log_info "添加环境变量到 $bash_config"
+
+    {
+        echo ""
+        echo "$start_marker"
+        echo "$env_line"
+        echo "$end_marker"
+    } >> "$bash_config"
+
+    log_success "环境变量已配置"
+    echo ""
+    echo -e "${YELLOW}重要提示:${NC}"
+    echo -e "  请勿在以下标记之间添加或修改内容："
+    echo -e "  ${CYAN}$start_marker${NC}"
+    echo -e "  ${CYAN}$end_marker${NC}"
+    echo -e "  卸载时将自动删除这些标记之间的所有内容"
+    echo ""
+}
+
+# 显示安装信息
+show_install_info() {
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 10: 安装完成                 │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    log_success "安装路径: $INSTALL_PATH"
+
+    local claude_bin="$INSTALL_PATH/bin/claude"
+    if [[ -x "$claude_bin" ]]; then
+        local ver
+        ver=$("$claude_bin" --version 2>/dev/null | head -1 || echo "未知版本")
+        log_success "Claude Code 版本: ${ver}"
+    else
+        echo -e "${YELLOW}警告: 未在 $claude_bin 找到可执行文件。${NC}"
+    fi
+
+    if [ -f "$INSTALL_PATH/PLATFORM" ]; then
+        log_success "平台: $(cat "$INSTALL_PATH/PLATFORM")"
+    fi
+
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  后续配置步骤                      │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    if confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+        configure_env_variables
+        echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+        echo "   source ~/.bashrc"
+        echo ""
+    else
+        echo -e "${YELLOW}手动配置环境变量:${NC}"
+        echo "   echo 'export PATH=\"$INSTALL_PATH/bin:\$PATH\"' >> ~/.bashrc"
+        echo "   source ~/.bashrc"
+        echo ""
+    fi
+
+    echo -e "${YELLOW}验证安装:${NC}"
+    echo "   source ~/.bashrc"
+    echo "   claude --version"
+    echo ""
+}
+
+# ==================== 主函数 ====================
+main() {
+    touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/claude_code_install.log"
+
+    if [[ $# -gt 0 ]]; then
+        show_usage
+        exit 0
+    fi
+
+    echo ""
+    echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║  Claude Code 管理工具              ║${NC}"
+    echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}选择操作模式:${NC}"
+    echo ""
+    echo "  1. 安装 Claude Code"
+    echo "  2. 卸载 Claude Code"
+    echo "  3. 更新配置"
+    echo "  0. 退出"
+    echo ""
+
+    read -p "  请选择 (0-3): " mode_choice
+    echo ""
+
+    case "$mode_choice" in
+        1)
+            echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║  Claude Code 离线安装 - 交互式模式 ║${NC}"
+            echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+
+            if ! prompt_existing_install; then
+                exit 1
+            fi
+
+            prompt_install_path
+
+            if ! prompt_package_path; then
+                exit 1
+            fi
+
+            install_claude_code
+            ;;
+        2)
+            uninstall_claude_code
+            ;;
+        3)
+            update_config
+            ;;
+        0)
+            log_info "退出"
+            exit 0
+            ;;
+        *)
+            log_error "无效选择"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
