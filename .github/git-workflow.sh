@@ -154,11 +154,14 @@ submit_code() {
     # 使用GitHub CLI自动创建PR
     log_info "正在自动创建Pull Request..."
     
+    local pr_body
+    printf -v pr_body '## 功能说明\n\n%s\n\n## 提交规范\n\n遵循 Conventional Commits 规范' "$pr_title"
+
     if gh pr create \
         --title "$pr_title" \
-        --body "## 功能说明\n\n$pr_title\n\n## 提交规范\n\n遵循 Conventional Commits 规范" \
+        --body "$pr_body" \
         --base main \
-        --head "$current_branch" 2>/dev/null; then
+        --head "$current_branch"; then
         log_success "✨ Pull Request 已自动创建！"
         echo ""
         
