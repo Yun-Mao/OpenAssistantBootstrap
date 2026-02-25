@@ -4,7 +4,7 @@
 
 **OpenAssistantBootstrap** is a collection of offline installation tools for the OpenAssistant project. The core design philosophy:
 - Zero root privileges required — everything installs to user home directories
-- Fully interactive — no CLI arguments; all input via prompted dialogs
+- Fully interactive — no operational CLI arguments (any arg shows help and exits); all input via prompted dialogs
 - Zero external dependencies — only bash and standard Unix tools (tar, unzip)
 - Designed primarily for CentOS 7 / Linux environments
 

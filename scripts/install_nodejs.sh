@@ -247,12 +247,21 @@ uninstall_nodejs() {
     echo ""
     
     if [ -d "$INSTALL_PATH" ]; then
-        # 安全校验：路径必须包含 "nodejs" 且不能是根目录或家目录
-        if [[ "$INSTALL_PATH" == "/" || "$INSTALL_PATH" == "$HOME" ]] || \
-           [[ "$INSTALL_PATH" != *"nodejs"* && "$INSTALL_PATH" != *"node"* ]]; then
-            log_error "安全校验失败：路径 '$INSTALL_PATH' 不像是 Node.js 安装目录，已中止卸载"
+        # 安全校验：禁止删除根目录或家目录
+        if [[ "$INSTALL_PATH" == "/" || "$INSTALL_PATH" == "$HOME" ]]; then
+            log_error "安全校验失败：不允许删除根目录或家目录 ($INSTALL_PATH)，已中止卸载"
             return 1
         fi
+
+        # 结构校验：检查是否存在可执行的 bin/node
+        if [ ! -x "$INSTALL_PATH/bin/node" ]; then
+            log_warn "安全提示：路径 '$INSTALL_PATH' 下未找到可执行文件 'bin/node'，看起来不像是 Node.js 安装目录。"
+            if ! confirm_action "仍然要删除该目录吗? 这可能删除与 Node.js 无关的文件"; then
+                log_error "卸载已取消"
+                return 1
+            fi
+        fi
+
         log_info "删除目录: $INSTALL_PATH"
         rm -rf "$INSTALL_PATH"
         log_success "目录已删除"
@@ -535,13 +544,13 @@ install_nodejs() {
     log_info "设置文件权限..."
     # 按文件类型分别设置权限：可执行文件 755，普通文件 644，目录 755
     if [ -d "$INSTALL_PATH/bin" ]; then
-        find "$INSTALL_PATH/bin" -type d -exec chmod 755 {} \;
-        find "$INSTALL_PATH/bin" -type f -perm -u+x -exec chmod 755 {} \;
-        find "$INSTALL_PATH/bin" -type f ! -perm -u+x -exec chmod 644 {} \;
+        find "$INSTALL_PATH/bin" -type d -exec chmod 755 {} +
+        find "$INSTALL_PATH/bin" -type f -perm -u+x -exec chmod 755 {} +
+        find "$INSTALL_PATH/bin" -type f ! -perm -u+x -exec chmod 644 {} +
     fi
     if [ -d "$INSTALL_PATH/lib" ]; then
-        find "$INSTALL_PATH/lib" -type d -exec chmod 755 {} \;
-        find "$INSTALL_PATH/lib" -type f -exec chmod 644 {} \;
+        find "$INSTALL_PATH/lib" -type d -exec chmod 755 {} +
+        find "$INSTALL_PATH/lib" -type f -exec chmod 644 {} +
     fi
     log_success "权限设置完成"
 
