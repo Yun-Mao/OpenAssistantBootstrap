@@ -125,6 +125,11 @@ submit_code() {
     
     check_git_status
     
+    # 检查gh CLI是否安装
+    if ! command -v gh &> /dev/null; then
+        log_error "GitHub CLI (gh) 未安装，请先安装: https://cli.github.com"
+    fi
+    
     local current_branch=$(get_current_branch)
     
     if [ "$current_branch" == "main" ]; then
@@ -138,15 +143,34 @@ submit_code() {
     git push -u origin "$current_branch"
     
     log_success "✨ 代码已推送到远端"
-    echo ""
-    echo -e "${CYAN}PR创建链接:${NC}"
-    echo "https://github.com/Yun-Mao/OpenAssistantBootstrap/pull/new/$current_branch"
-    echo ""
-    echo -e "${YELLOW}提示:${NC}"
-    echo "1. 访问上面的链接创建Pull Request"
-    echo "2. 填写标题: $pr_title"
-    echo "3. 在GitHub上进行Code Review"
-    echo "4. PR合并后运行: ./git-workflow.sh finalize"
+    
+    # 使用GitHub CLI自动创建PR
+    log_info "正在自动创建Pull Request..."
+    
+    if gh pr create \
+        --title "$pr_title" \
+        --body "## 功能说明\n\n$pr_title\n\n## 提交规范\n\n遵循 Conventional Commits 规范" \
+        --base main \
+        --head "$current_branch" 2>/dev/null; then
+        log_success "✨ Pull Request 已自动创建！"
+        echo ""
+        
+        # 获取PR URL
+        local pr_url=$(gh pr view "$current_branch" --json url --jq .url 2>/dev/null || echo "")
+        if [ -n "$pr_url" ]; then
+            echo -e "${CYAN}PR链接:${NC}"
+            echo "$pr_url"
+            echo ""
+        fi
+    else
+        log_warn "自动创建PR失败，请手动创建"
+        log_warn "PR链接: https://github.com/Yun-Mao/OpenAssistantBootstrap/pull/new/$current_branch"
+        echo ""
+    fi
+    
+    echo -e "${YELLOW}下一步:${NC}"
+    echo "1. 在GitHub上进行Code Review"
+    echo "2. PR合并后运行: ./git-workflow.sh finalize"
     echo ""
 }
 
