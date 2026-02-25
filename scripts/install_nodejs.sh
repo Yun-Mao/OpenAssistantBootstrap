@@ -252,15 +252,42 @@ uninstall_nodejs() {
         log_success "目录已删除"
     fi
     
+    # 删除环境变量配置
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  删除环境变量配置                  │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    
+    local bash_config="$HOME/.bashrc"
+    local start_marker="# >>> Node.js Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local end_marker="# <<< Node.js Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    
+    if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
+        log_info "检测到环境变量配置，正在删除..."
+        
+        # 使用 sed 删除标记之间的所有内容（包括标记本身和前后的空行）
+        sed -i "/^$start_marker$/,/^$end_marker$/d" "$bash_config"
+        # 删除可能的多余空行
+        sed -i '/^$/N;/^\n$/D' "$bash_config"
+        
+        log_success "环境变量配置已删除"
+        echo ""
+        echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+        echo "  source ~/.bashrc"
+    else
+        log_info "未找到自动配置的环境变量"
+        echo ""
+        echo -e "${YELLOW}提示:${NC} 如果您手动配置了环境变量，请手动删除:"
+        echo "  编辑 ~/.bashrc，移除包含 '$INSTALL_PATH' 的 PATH 配置行"
+    fi
+    
+    echo ""
     log_info "删除安装记录..."
     rm -f "$INSTALL_RECORD"
     
     echo ""
     log_success "Node.js 卸载完成!"
-    echo ""
-    echo -e "${YELLOW}提示:${NC} 如果您之前配置了环境变量，请手动删除:"
-    echo "  编辑 ~/.bashrc，移除以下行:"
-    echo "  export PATH=\"$INSTALL_PATH/bin:\$PATH\""
 }
 
 # ==================== 更新配置功能 ====================
@@ -314,17 +341,17 @@ update_config() {
         1)
             echo ""
             echo -e "${YELLOW}配置环境变量:${NC}"
-            echo "  复制以下命令到终端执行:"
-            echo ""
-            echo "  echo 'export PATH=\"$INSTALL_PATH/bin:\$PATH\"' >> ~/.bashrc"
-            echo "  source ~/.bashrc"
             echo ""
             
-            if confirm_action "现在执行这些命令?"; then
-                echo 'export PATH="'$INSTALL_PATH'/bin:$PATH"' >> ~/.bashrc
-                # source ~/.bashrc
-                log_success "环境变量已配置"
+            local bash_config="$HOME/.bashrc"
+            local start_marker="# >>> Node.js Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+            
+            # 检查是否已配置
+            if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
+                log_warn "环境变量已经配置过了"
                 echo ""
+            elif confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+                configure_env_variables
                 echo -e "${YELLOW}请运行以下命令使配置生效:${NC}"
                 echo "  source ~/.bashrc"
             fi
@@ -444,15 +471,32 @@ install_nodejs() {
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
     
-    local extracted_dir=$(find "$temp_dir" -maxdepth 1 -type d ! -name "." | head -1)
+    # 查找解压后的目录
+    local extracted_dir=$(find "$temp_dir" -maxdepth 1 -type d ! -path "$temp_dir" | head -1)
     if [ -z "$extracted_dir" ]; then
-        log_error "无法找到提取的内容"
+        log_error "无法找到解压后的目录"
         return 1
     fi
 
-    log_info "复制文件..."
+    log_info "复制文件: $(basename "$extracted_dir") -> $INSTALL_PATH"
+    
+    # 复制所有内容到安装目录（确保 bin 目录直接在安装目录下）
     cp -r "$extracted_dir"/* "$INSTALL_PATH/"
     log_success "文件复制完成"
+    
+    # 验证关键目录结构
+    if [ ! -d "$INSTALL_PATH/bin" ]; then
+        log_error "错误: bin 目录不在安装路径下"
+        log_error "请检查压缩包结构是否正确"
+        return 1
+    fi
+    
+    if [ ! -f "$INSTALL_PATH/bin/node" ]; then
+        log_error "错误: 未找到 node 可执行文件"
+        return 1
+    fi
+    
+    log_success "目录结构验证通过: bin/ 在 $INSTALL_PATH 下"
 
     # ========== 步骤 9: 设置权限 ==========
     echo ""
@@ -474,6 +518,39 @@ install_nodejs() {
     
     # 显示安装信息
     show_install_info
+}
+
+# 配置环境变量到 bashrc
+configure_env_variables() {
+    local bash_config="$HOME/.bashrc"
+    local start_marker="# >>> Node.js Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local end_marker="# <<< Node.js Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local env_line="export PATH=\"$INSTALL_PATH/bin:\$PATH\""
+    
+    # 检查是否已存在配置
+    if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
+        log_warn "环境变量已配置，跳过"
+        return 0
+    fi
+    
+    log_info "添加环境变量到 $bash_config"
+    
+    # 添加带注释标记的环境变量
+    {
+        echo ""
+        echo "$start_marker"
+        echo "$env_line"
+        echo "$end_marker"
+    } >> "$bash_config"
+    
+    log_success "环境变量已配置"
+    echo ""
+    echo -e "${YELLOW}重要提示:${NC}"
+    echo -e "  请勿在以下标记之间添加或修改内容："
+    echo -e "  ${CYAN}$start_marker${NC}"
+    echo -e "  ${CYAN}$end_marker${NC}"
+    echo -e "  卸载时将自动删除这些标记之间的所有内容"
+    echo ""
 }
 
 # 显示安装信息
@@ -498,18 +575,25 @@ show_install_info() {
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
     
-    echo -e "${YELLOW}1. 配置环境变量（永久使用）:${NC}"
-    echo "   echo 'export PATH=\"$INSTALL_PATH/bin:\$PATH\"' >> ~/.bashrc"
-    echo "   source ~/.bashrc"
-    echo ""
+    if confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+        configure_env_variables
+        echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+        echo "   source ~/.bashrc"
+        echo ""
+    else
+        echo -e "${YELLOW}手动配置环境变量:${NC}"
+        echo "   echo 'export PATH=\"$INSTALL_PATH/bin:\$PATH\"' >> ~/.bashrc"
+        echo "   source ~/.bashrc"
+        echo ""
+    fi
     
-    echo -e "${YELLOW}2. 验证安装:${NC}"
+    echo -e "${YELLOW}验证安装:${NC}"
     echo "   source ~/.bashrc"
     echo "   node --version"
     echo "   npm --version"
     echo ""
     
-    echo -e "${YELLOW}3. 配置 npm 镜像源（可选）:${NC}"
+    echo -e "${YELLOW}配置 npm 镜像源（可选）:${NC}"
     echo "   npm config set registry https://registry.npmmirror.com"
     echo ""
 }
