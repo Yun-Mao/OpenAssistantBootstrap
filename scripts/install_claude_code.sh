@@ -24,6 +24,15 @@ LOG_FILE="/tmp/claude_code_install_$(date +%s).log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_PKG_DIR="${SCRIPT_DIR}/../packages"
 INSTALL_RECORD="$HOME/.claude_code_install_record"
+PATCH_TOOLS_DIR="$HOME/.patch-tools"
+GLIBC_VERSION="2.31"
+GLIBC_DIR="${PATCH_TOOLS_DIR}/glibc-${GLIBC_VERSION}"
+GLIBC_LINK_DIR="$HOME/.glibc"
+GLIBC_LIB="${GLIBC_LINK_DIR}/lib"
+GLIBC_INTERPRETER="${GLIBC_LIB}/ld-linux-x86-64.so.2"
+PATCHELF_DIR="${PATCH_TOOLS_DIR}/patchelf"
+PATCHELF_BIN="${PATCHELF_DIR}/bin/patchelf"
+CLAUDE_PATCHED="no"
 
 # ==================== 工具函数 ====================
 log_info() {
@@ -47,6 +56,279 @@ confirm_action() {
     read -p "  $(echo -e "${YELLOW}")${prompt}$(echo -e "${NC}") (y/N): " -n 1 -r
     echo
     [[ $REPLY =~ ^[Yy]$ ]]
+}
+
+find_local_package() {
+    local name_pattern_1="$1"
+    local name_pattern_2="$2"
+
+    if [ -d "$DEFAULT_PKG_DIR" ]; then
+        find "$DEFAULT_PKG_DIR" -maxdepth 2 -type f \( -name "$name_pattern_1" -o -name "$name_pattern_2" \) 2>/dev/null | sort -r | head -1
+    fi
+}
+
+extract_package() {
+    local pkg_path="$1"
+    local dest_dir="$2"
+
+    case "$pkg_path" in
+        *.tar.gz|*.tgz)
+            tar -xzf "$pkg_path" -C "$dest_dir"
+            ;;
+        *.tar.xz)
+            tar -xJf "$pkg_path" -C "$dest_dir"
+            ;;
+        *.zip)
+            unzip -q "$pkg_path" -d "$dest_dir"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+detect_glibc_version() {
+    if command -v getconf &>/dev/null; then
+        getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}'
+        return 0
+    fi
+
+    if command -v ldd &>/dev/null; then
+        ldd --version 2>/dev/null | head -n 1 | grep -Eo '[0-9]+\.[0-9]+'
+        return 0
+    fi
+
+    echo ""
+}
+
+claude_needs_patch() {
+    local claude_bin="$INSTALL_PATH/bin/claude"
+    local output
+    local status
+
+    if [ ! -x "$claude_bin" ]; then
+        return 1
+    fi
+
+    set +e
+    output=$("$claude_bin" --version 2>&1)
+    status=$?
+    set -e
+    if [ $status -eq 0 ]; then
+        return 1
+    fi
+
+    if echo "$output" | grep -q "GLIBC_"; then
+        return 0
+    fi
+
+    if echo "$output" | grep -qi "not found"; then
+        return 0
+    fi
+
+    if command -v ldd &>/dev/null; then
+        if ldd "$claude_bin" 2>&1 | grep -q "GLIBC_"; then
+            return 0
+        fi
+        if ldd "$claude_bin" 2>&1 | grep -qi "not found"; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+ensure_patchelf() {
+    if command -v patchelf &>/dev/null; then
+        PATCHELF_BIN="$(command -v patchelf)"
+        return 0
+    fi
+
+    if [ -x "$PATCHELF_BIN" ]; then
+        return 0
+    fi
+
+    local pkg_path
+    pkg_path=$(find_local_package "patchelf-*.tar.gz" "patchelf-*.tar.xz")
+    if [ -z "$pkg_path" ]; then
+        pkg_path=$(find_local_package "patchelf-*.zip" "patchelf-*.tgz")
+    fi
+
+    if [ -z "$pkg_path" ]; then
+        log_error "未找到 patchelf 离线包，请放入 packages/ 目录"
+        return 1
+    fi
+
+    log_info "检测到 patchelf 离线包: $(basename "$pkg_path")"
+
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    if ! extract_package "$pkg_path" "$temp_dir"; then
+        log_error "patchelf 离线包格式不支持: $pkg_path"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    local extracted_dir
+    extracted_dir=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d | head -1)
+    if [ -z "$extracted_dir" ]; then
+        log_error "patchelf 离线包解压失败"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    local found_bin
+    found_bin=$(find "$extracted_dir" -type f -name "patchelf" -perm -u+x | head -1)
+    if [ -z "$found_bin" ]; then
+        log_error "patchelf 离线包中未找到可执行文件"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    mkdir -p "$PATCHELF_DIR/bin"
+    cp "$found_bin" "$PATCHELF_BIN"
+    chmod 755 "$PATCHELF_BIN"
+    rm -rf "$temp_dir"
+    log_success "patchelf 已安装到: $PATCHELF_BIN"
+    return 0
+}
+
+ensure_glibc() {
+    if [ -f "$GLIBC_INTERPRETER" ]; then
+        return 0
+    fi
+
+    local pkg_path
+    pkg_path=$(find_local_package "glibc-${GLIBC_VERSION}-*.tar.gz" "glibc-${GLIBC_VERSION}.tar.gz")
+    if [ -z "$pkg_path" ]; then
+        pkg_path=$(find_local_package "glibc-${GLIBC_VERSION}-*.tar.xz" "glibc-${GLIBC_VERSION}.tar.xz")
+    fi
+
+    if [ -z "$pkg_path" ]; then
+        log_error "未找到 glibc ${GLIBC_VERSION} 离线包，请放入 packages/ 目录"
+        return 1
+    fi
+
+    log_info "检测到 glibc ${GLIBC_VERSION} 离线包: $(basename "$pkg_path")"
+
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    if ! extract_package "$pkg_path" "$temp_dir"; then
+        log_error "glibc 离线包格式不支持: $pkg_path"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    local extracted_dir
+    extracted_dir=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d | head -1)
+    if [ -z "$extracted_dir" ]; then
+        log_error "glibc 离线包解压失败"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    mkdir -p "$PATCH_TOOLS_DIR"
+    rm -rf "$GLIBC_DIR"
+    mv "$extracted_dir" "$GLIBC_DIR"
+    rm -rf "$temp_dir"
+
+    # 创建软链：$HOME/.glibc/lib -> $GLIBC_DIR/lib
+    mkdir -p "$GLIBC_LINK_DIR"
+    rm -f "$GLIBC_LINK_DIR/lib"
+    ln -s "$GLIBC_DIR/lib" "$GLIBC_LINK_DIR/lib"
+    log_info "创建软链: $GLIBC_LINK_DIR/lib -> $GLIBC_DIR/lib"
+
+    if [ ! -f "$GLIBC_INTERPRETER" ]; then
+        log_error "glibc 目录缺少加载器: $GLIBC_INTERPRETER"
+        return 1
+    fi
+
+    log_success "glibc ${GLIBC_VERSION} 已安装到: $GLIBC_DIR"
+    log_success "软链已创建到: $GLIBC_LINK_DIR/lib"
+    return 0
+}
+
+apply_patch_to_claude() {
+    local claude_bin="$INSTALL_PATH/bin/claude"
+    local patchelf_bin="$PATCHELF_BIN"
+
+    if command -v patchelf &>/dev/null; then
+        patchelf_bin="$(command -v patchelf)"
+    fi
+
+    if [ ! -x "$patchelf_bin" ]; then
+        log_error "patchelf 不可用，无法执行 patch"
+        return 1
+    fi
+
+    if [ ! -f "$GLIBC_INTERPRETER" ]; then
+        log_error "glibc 加载器不存在: $GLIBC_INTERPRETER"
+        return 1
+    fi
+
+    log_info "正在 patch Claude Code..."
+    if ! "$patchelf_bin" --set-interpreter "$GLIBC_INTERPRETER" "$claude_bin"; then
+        log_error "设置 interpreter 失败"
+        return 1
+    fi
+
+    if ! "$patchelf_bin" --force-rpath --set-rpath "$GLIBC_LIB:/usr/lib64:/lib64" "$claude_bin"; then
+        log_error "设置 rpath 失败"
+        return 1
+    fi
+
+    log_success "Claude Code patch 完成"
+    CLAUDE_PATCHED="yes"
+    return 0
+}
+
+maybe_patch_claude() {
+    local claude_bin="$INSTALL_PATH/bin/claude"
+    local glibc_version
+
+    if [ ! -x "$claude_bin" ]; then
+        return 0
+    fi
+
+    if [ "$(uname -s)" != "Linux" ]; then
+        log_info "非 Linux 平台，跳过 patch"
+        return 0
+    fi
+
+    glibc_version=$(detect_glibc_version)
+    if [ -n "$glibc_version" ]; then
+        log_info "检测到系统 glibc 版本: $glibc_version"
+    fi
+
+    if ! claude_needs_patch; then
+        log_info "Claude Code 可直接运行，无需 patch"
+        return 0
+    fi
+
+    log_warn "检测到 Claude Code 可能需要 glibc ${GLIBC_VERSION} patch"
+
+    if ! ensure_patchelf; then
+        log_error "缺少 patchelf，跳过 patch"
+        return 0
+    fi
+
+    if ! ensure_glibc; then
+        log_error "缺少 glibc ${GLIBC_VERSION}，跳过 patch"
+        return 0
+    fi
+
+    if ! apply_patch_to_claude; then
+        log_error "Claude Code patch 失败"
+        return 0
+    fi
+
+    local verify_output
+    verify_output=$("$claude_bin" --version 2>&1 || true)
+    if echo "$verify_output" | grep -q "Claude"; then
+        log_success "patch 后验证通过: $verify_output"
+    else
+        log_warn "patch 后仍无法验证: $verify_output"
+    fi
 }
 
 show_usage() {
@@ -512,6 +794,15 @@ install_claude_code() {
     chmod 755 "$INSTALL_PATH/bin/claude"
     log_success "权限设置完成"
 
+    # ========== 步骤 9.5: 智能检测并 patch ==========
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  步骤 9.5: 检测是否需要 patch      │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    maybe_patch_claude
+
     log_success "Claude Code 安装成功!"
 
     # 保存安装记录
@@ -573,6 +864,10 @@ show_install_info() {
 
     if [ -f "$INSTALL_PATH/PLATFORM" ]; then
         log_success "平台: $(cat "$INSTALL_PATH/PLATFORM")"
+    fi
+
+    if [ "$CLAUDE_PATCHED" = "yes" ]; then
+        log_success "patch 状态: 已应用 glibc ${GLIBC_VERSION}"
     fi
 
     echo ""

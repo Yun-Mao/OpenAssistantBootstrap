@@ -43,6 +43,11 @@ chmod +x scripts/install_claude_code.sh
 | 离线机器（install） | bash、tar（标准 Unix 工具即可） |
 | 权限 | 无需 root |
 
+可选依赖（仅在低版本 glibc 环境需要 patch 时使用）：
+
+- patchelf 离线包
+- glibc 2.31 离线包
+
 ## 支持的平台
 
 | 平台标识 | 适用系统 |
@@ -62,6 +67,25 @@ $HOME/claude-code/        ← 默认安装路径
 │   └── claude            ← 可执行二进制
 ├── VERSION               ← 版本号记录
 └── PLATFORM              ← 平台标识记录
+```
+
+## Patch 说明（可选）
+
+在 CentOS 7 / glibc 版本偏低的环境中，Claude Code 可能会提示缺少 GLIBC_2.28/GLIBC_2.31。
+安装脚本会自动检测并尝试使用 patchelf + glibc 2.31 对二进制进行 patch。
+
+请提前在 packages/ 目录中放入以下离线包：
+
+```
+patchelf-<version>-linux-x64.tar.gz
+glibc-2.31-linux-x64.tar.gz
+```
+
+也可以提前运行通用安装脚本安装 patch 工具：
+
+```bash
+chmod +x scripts/install_patch_tools.sh
+./scripts/install_patch_tools.sh
 ```
 
 ## 版本管理

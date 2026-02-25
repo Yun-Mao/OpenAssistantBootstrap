@@ -23,6 +23,22 @@ claude-code-<VERSION>-<PLATFORM>.tar.gz
   claude-code-v2.1.56-linux-arm64.tar.gz
 ```
 
+## Patch 依赖包（可选）
+
+低版本 glibc 环境可能需要 patch，脚本会自动检测并使用以下离线包：
+
+```
+patchelf-<version>-linux-x64.tar.gz
+glibc-2.31-linux-x64.tar.gz
+```
+
+## Patch 工具安装（可选）
+
+```bash
+chmod +x scripts/install_patch_tools.sh
+./scripts/install_patch_tools.sh
+```
+
 ## 平台速查
 
 | 系统 | 选择平台 |

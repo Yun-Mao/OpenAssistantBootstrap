@@ -94,6 +94,17 @@
 - 复制 bin/claude 二进制
 - 设置 755 权限
 
+### 步骤 9.5: 智能检测 patch（可选）
+
+如果检测到 glibc 版本过低，脚本会提示并自动使用 packages/ 中的 patchelf + glibc 2.31 进行 patch。
+
+也可以提前运行通用安装脚本安装 patch 工具：
+
+```bash
+chmod +x scripts/install_patch_tools.sh
+./scripts/install_patch_tools.sh
+```
+
 ### 步骤 10: 完成配置
 ```
   [SUCCESS] 安装路径: /home/user/claude-code

@@ -31,3 +31,23 @@ claude-code-<VERSION>-<PLATFORM>.tar.gz
 chmod +x scripts/fetch_claude_code.sh
 ./scripts/fetch_claude_code.sh
 ```
+
+## Claude Code Patch 依赖（可选）
+
+某些 CentOS 7 / 低版本 glibc 环境需要 patch Claude Code 才能运行。
+当安装脚本检测到需要 patch 时，会自动尝试安装以下离线包：
+
+- patchelf
+- glibc 2.31
+
+请将离线包放入 packages/ 目录，脚本会自动识别：
+
+```
+patchelf-<version>-linux-x64.tar.gz
+glibc-2.31-linux-x64.tar.gz
+```
+
+离线包需要包含以下结构（示例）：
+
+- patchelf 包中包含可执行文件 `patchelf`
+- glibc 包中包含 `lib/ld-linux-x86-64.so.2`

@@ -52,6 +52,7 @@
 - 🔧 **获取离线包**: `scripts/fetch_claude_code.sh`（在有网机器上运行）
 - 🔧 **安装脚本**: `scripts/install_claude_code.sh`
 - 💡 **特点**: 官方预编译独立二进制，无需 Node.js
+- 🧩 **可选 Patch**: 低版本 glibc 环境自动检测并使用 patchelf + glibc 2.31 修复运行
 
 ## 快速开始
 
@@ -143,6 +144,14 @@ packages/claude-code-v2.1.56-linux-x64.tar.gz
 ```bash
 chmod +x scripts/install_claude_code.sh
 ./scripts/install_claude_code.sh
+```
+
+如检测到 glibc 版本过低，脚本会提示并自动使用 packages/ 中的 patchelf 与 glibc 2.31 进行 patch。
+也可以提前运行通用安装脚本安装 patch 工具：
+
+```bash
+chmod +x scripts/install_patch_tools.sh
+./scripts/install_patch_tools.sh
 ```
 
 #### 3. 验证安装
