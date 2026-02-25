@@ -22,105 +22,71 @@
 chmod +x scripts/install_nodejs.sh
 ```
 
-### 2. 检查本地 Node.js 版本
+### 2. 启动交互式管理工具
 
 ```bash
-./scripts/install_nodejs.sh --check
+./scripts/install_nodejs.sh
 ```
 
-输出示例：
-```
-[INFO] 检测本地 Node.js 版本...
-[SUCCESS] 检测到 Node.js: v16.13.0
-[SUCCESS] 检测到 npm: 7.24.0
-[INFO] Node.js 位置: /opt/nodejs/bin/node
-```
+脚本会显示操作菜单：
 
-### 3. 开始交互式安装
-
-```bash
-./scripts/install_nodejs.sh --path /home/app/nodejs --pkg ./node-v16.20.0-linux-x64.tar.xz
+```
+  1. 安装 Node.js
+  2. 卸载 Node.js
+  3. 更新配置
+  0. 退出
 ```
 
-安装过程中会进行多步交互确认：
-- ✅ 第1步：确认安装信息（源包和目标路径）
-- ✅ 第2步：检查并确认目标路径（如存在则确认是否覆盖）
-- ✅ 第3-7步：自动执行创建、解压、复制、权限设置
-- ✅ 第8步：交互配置环境变量
-- ✅ 第9步：交互配置 npm 镜像源
+> 传入任意参数（如 `--help`）会显示使用说明后退出。
+
+### 3. 安装流程步骤
+
+选择 `1` 后，脚本会依次引导：
+
+- ✅ 步骤 1：检测并显示现有 Node.js 安装（如有），确认是否继续
+- ✅ 步骤 2：交互输入安装路径（默认 `$HOME/nodejs`）
+- ✅ 步骤 3：自动在 `packages/` 目录查找安装包，或手动输入路径
+- ✅ 步骤 4：确认源包和目标路径
+- ✅ 步骤 5-9：自动执行创建目录、解压、复制、权限设置
+- ✅ 步骤 10：显示安装结果，询问是否自动配置环境变量到 `~/.bashrc`
 
 ## 详细命令说明
 
-### 检查版本
+### 运行管理工具
 
 ```bash
-./scripts/install_nodejs.sh --check
+./scripts/install_nodejs.sh
 ```
 
-检查本地是否已安装 Node.js，如果已安装会显示：
-- Node.js 版本号
-- npm 版本号
-- Node.js 安装位置
-
-### 安装命令
-
-```bash
-./scripts/install_nodejs.sh --path <安装路径> --pkg <压缩包路径>
-```
-
-**必需选项：**
-- `--path <路径>` - 指定安装路径
-- `--pkg <文件>` - 指定本地压缩包路径
+纯交互式，无用于安装/卸载的命令行参数（传参仅显示使用说明并退出），所有输入通过菜单和提示完成。
 
 **安装过程 - 交互步骤：**
 
-1. **步骤 1：确认安装信息**
-   - 显示源包路径
-   - 显示目标安装路径
-   - 等待用户确认 (y/N)
+1. **步骤 1：检测现有安装**
+   - 如已安装，显示版本号和路径
+   - 询问是否继续安装新版本
 
-2. **步骤 2：检查目标路径**
-   - 检查安装路径是否存在
-   - 如果存在：询问是否覆盖
-   - 等待用户确认 (y/N)
+2. **步骤 2：选择安装路径**
+   - 默认值：`$HOME/nodejs`
+   - 直接回车使用默认，或输入自定义路径
 
-3. **步骤 3-7：自动执行**
+3. **步骤 3：选择压缩包**
+   - 自动在 `packages/` 目录查找
+   - 找到时询问是否使用，未找到时手动输入路径
+
+4. **步骤 4：确认安装信息**
+   - 显示源包和目标路径，最后确认
+
+5. **步骤 5-9：自动执行**
    - 创建安装目录
    - 自动检测压缩格式并解压
    - 复制文件到目标位置
    - 设置文件权限
    - 验证安装
 
-4. **步骤 8：环境变量配置（交互）**
-   - 显示 Node.js 和 npm 版本
-   - 展示配置方式
-   - 询问是否自动添加到 ~/.bashrc
-   - 询问是否立即加载环境变量
-   - 自动验证安装（如果加载成功）
-
-5. **步骤 9：npm 镜像配置（交互）**
-   - 询问是否配置国内镜像源
-   - 列出推荐的镜像源选项
-   - 让用户选择 (1-4)
-   - 自动设置选定的镜像源
-
-**示例：**
-```bash
-# 安装到用户主目录
-./scripts/install_nodejs.sh --path ~/nodejs --pkg /tmp/node-v16.20.0-linux-x64.tar.xz
-
-# 安装到应用目录
-./scripts/install_nodejs.sh --path /home/app/nodejs --pkg ./node-v16.20.0-linux-x64.tar.xz
-
-# 安装到自定义路径
-./scripts/install_nodejs.sh --path /opt/nodejs --pkg /data/packages/node-v18.0.0-linux-x64.tar.xz
-```
-
-### 帮助
-
-```bash
-./scripts/install_nodejs.sh --help
-```
+6. **步骤 10：完成配置**
+   - 显示 Node.js/npm 版本
+   - 询问是否自动添加环境变量到 `~/.bashrc`
 
 ## 配置环境变量
 
@@ -173,52 +139,42 @@ which npm
 
 ### 示例 1：标准企业部署
 
+将安装包提前放入 `packages/` 目录，然后按交互提示完成安装：
+
 ```bash
-#!/bin/bash
-set -e
+# 1. 将 Node.js 包放入 packages/ 目录
+cp /data/packages/node-v16.20.0-linux-x64.tar.xz packages/
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NODE_PACKAGE="/data/packages/node-v16.20.0-linux-x64.tar.xz"
-INSTALL_PATH="$HOME/nodejs"
+# 2. 运行安装脚本，按提示操作
+./scripts/install_nodejs.sh
 
-# 检查版本
-$SCRIPT_DIR/scripts/install_nodejs.sh --check
-
-# 安装 Node.js
-$SCRIPT_DIR/scripts/install_nodejs.sh --path "$INSTALL_PATH" --pkg "$NODE_PACKAGE"
-
-# 配置环境变量
-echo "export PATH=\"$INSTALL_PATH/bin:\$PATH\"" >> ~/.bashrc
+# 安装完成后配置环境变量（脚本会提示自动写入或手动执行）
+echo 'export PATH="$HOME/nodejs/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
-# 验证安装
+# 3. 验证安装
 node --version
 npm --version
 
-# 配置 npm 镜像源
+# 4. 配置 npm 镜像源
 npm config set registry https://registry.npmmirror.com
-
-echo "安装完成！"
 ```
 
 ### 示例 2：多版本管理
 
+由于脚本为交互式，多版本安装需分别运行并在提示中指定不同路径：
+
 ```bash
-#!/bin/bash
+# 运行安装脚本，在路径提示处输入 ~/nodejs-v14
+./scripts/install_nodejs.sh
+# 提示"安装路径": ~/nodejs-v14
+# 提示"压缩包路径": /data/node-v14.20.0-linux-x64.tar.xz
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 再次运行安装 v16
+./scripts/install_nodejs.sh
+# 提示"安装路径": ~/nodejs-v16
+# 提示"压缩包路径": /data/node-v16.20.0-linux-x64.tar.xz
 
-# 安装 v14 到独立路径
-$SCRIPT_DIR/scripts/install_nodejs.sh \
-  --path ~/nodejs-v14 \
-  --pkg /data/node-v14.20.0-linux-x64.tar.xz
-
-# 安装 v16 到独立路径
-$SCRIPT_DIR/scripts/install_nodejs.sh \
-  --path ~/nodejs-v16 \
-  --pkg /data/node-v16.20.0-linux-x64.tar.xz
-
-echo "两个版本都已安装"
 echo "v14 路径: $HOME/nodejs-v14/bin/node"
 echo "v16 路径: $HOME/nodejs-v16/bin/node"
 
@@ -229,18 +185,19 @@ node --version
 
 ### 示例 3：Docker 容器部署
 
+> ⚠️ 注意：`install_nodejs.sh` 为纯交互式脚本，不支持命令行参数，无法在 Docker `RUN` 指令中直接调用。  
+> 如需在容器中使用 Node.js，建议直接解压安装包并配置 PATH：
+
 ```dockerfile
 FROM centos:7
 
 # 复制本地的 Node.js 包
 COPY node-v16.20.0-linux-x64.tar.xz /tmp/
-COPY scripts/install_nodejs.sh /tmp/
 
-# 执行安装
-RUN chmod +x /tmp/install_nodejs.sh && \
-    /tmp/install_nodejs.sh \
-        --path /opt/nodejs \
-        --pkg /tmp/node-v16.20.0-linux-x64.tar.xz && \
+# 直接解压到目标目录
+RUN mkdir -p /opt/nodejs && \
+    tar -xJf /tmp/node-v16.20.0-linux-x64.tar.xz -C /opt/nodejs --strip-components=1 && \
+    rm /tmp/node-v16.20.0-linux-x64.tar.xz && \
     /opt/nodejs/bin/npm config set registry https://registry.npmmirror.com
 
 # 配置环境变量

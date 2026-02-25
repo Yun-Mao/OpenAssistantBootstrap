@@ -44,7 +44,7 @@ log_error() {
 # 确认对话框
 confirm_action() {
     local prompt="$1"
-    read -p "  $(echo -e ${YELLOW})${prompt}$(echo -e ${NC}) (y/N): " -n 1 -r
+    read -p "  $(echo -e "${YELLOW}")${prompt}$(echo -e "${NC}") (y/N): " -n 1 -r
     echo
     [[ $REPLY =~ ^[Yy]$ ]]
 }
@@ -247,6 +247,21 @@ uninstall_nodejs() {
     echo ""
     
     if [ -d "$INSTALL_PATH" ]; then
+        # 安全校验：禁止删除根目录或家目录
+        if [[ "$INSTALL_PATH" == "/" || "$INSTALL_PATH" == "$HOME" ]]; then
+            log_error "安全校验失败：不允许删除根目录或家目录 ($INSTALL_PATH)，已中止卸载"
+            return 1
+        fi
+
+        # 结构校验：检查是否存在可执行的 bin/node
+        if [ ! -x "$INSTALL_PATH/bin/node" ]; then
+            log_warn "安全提示：路径 '$INSTALL_PATH' 下未找到可执行文件 'bin/node'，看起来不像是 Node.js 安装目录。"
+            if ! confirm_action "仍然要删除该目录吗? 这可能删除与 Node.js 无关的文件"; then
+                log_error "卸载已取消"
+                return 1
+            fi
+        fi
+
         log_info "删除目录: $INSTALL_PATH"
         rm -rf "$INSTALL_PATH"
         log_success "目录已删除"
@@ -263,18 +278,26 @@ uninstall_nodejs() {
     local start_marker="# >>> Node.js Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
     local end_marker="# <<< Node.js Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
     
-    if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
+    if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
         log_info "检测到环境变量配置，正在删除..."
         
-        # 使用 sed 删除标记之间的所有内容（包括标记本身和前后的空行）
-        sed -i "/^$start_marker$/,/^$end_marker$/d" "$bash_config"
-        # 删除可能的多余空行
-        sed -i '/^$/N;/^\n$/D' "$bash_config"
+        # 使用行号范围删除标记块（避免 marker 中正则元字符的干扰）
+        local start_line end_line
+        start_line=$(grep -nF "$start_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
+        end_line=$(grep -nF "$end_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
         
-        log_success "环境变量配置已删除"
-        echo ""
-        echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
-        echo "  source ~/.bashrc"
+        if [[ -n "$start_line" && -n "$end_line" && "$end_line" -ge "$start_line" ]]; then
+            sed -i "${start_line},${end_line}d" "$bash_config"
+            # 删除可能的多余空行
+            sed -i '/^$/N;/^\n$/D' "$bash_config"
+            
+            log_success "环境变量配置已删除"
+            echo ""
+            echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+            echo "  source ~/.bashrc"
+        else
+            log_info "未找到完整的环境变量标记块，跳过自动删除"
+        fi
     else
         log_info "未找到自动配置的环境变量"
         echo ""
@@ -318,11 +341,24 @@ update_config() {
     echo ""
     echo -e "  ${YELLOW}安装路径:${NC} $INSTALL_PATH"
     
-    local node_version=$("$INSTALL_PATH/bin/node" --version)
-    local npm_version=$("$INSTALL_PATH/bin/npm" --version)
-    
-    echo -e "  ${YELLOW}Node.js 版本:${NC} $node_version"
-    echo -e "  ${YELLOW}npm 版本:${NC} $npm_version"
+    local node_bin="$INSTALL_PATH/bin/node"
+    local npm_bin="$INSTALL_PATH/bin/npm"
+
+    if [[ -x "$node_bin" ]]; then
+        local node_version
+        node_version=$("$node_bin" --version 2>/dev/null || true)
+        echo -e "  ${YELLOW}Node.js 版本:${NC} ${node_version:-无法获取版本信息}"
+    else
+        echo -e "  ${YELLOW}警告:${NC} 未在 $node_bin 找到可执行的 node"
+    fi
+
+    if [[ -x "$npm_bin" ]]; then
+        local npm_version
+        npm_version=$("$npm_bin" --version 2>/dev/null || true)
+        echo -e "  ${YELLOW}npm 版本:${NC} ${npm_version:-无法获取版本信息}"
+    else
+        echo -e "  ${YELLOW}警告:${NC} 未在 $npm_bin 找到可执行的 npm"
+    fi
     echo ""
     
     echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
@@ -443,7 +479,7 @@ install_nodejs() {
     
     log_info "解压文件..."
     local temp_dir=$(mktemp -d)
-    trap "rm -rf $temp_dir" EXIT
+    trap "rm -rf '$temp_dir'" EXIT
 
     case "$PKG_PATH" in
         *.tar.gz)
@@ -472,7 +508,7 @@ install_nodejs() {
     echo ""
     
     # 查找解压后的目录
-    local extracted_dir=$(find "$temp_dir" -maxdepth 1 -type d ! -path "$temp_dir" | head -1)
+    local extracted_dir=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d | head -1)
     if [ -z "$extracted_dir" ]; then
         log_error "无法找到解压后的目录"
         return 1
@@ -480,8 +516,8 @@ install_nodejs() {
 
     log_info "复制文件: $(basename "$extracted_dir") -> $INSTALL_PATH"
     
-    # 复制所有内容到安装目录（确保 bin 目录直接在安装目录下）
-    cp -r "$extracted_dir"/* "$INSTALL_PATH/"
+    # 复制所有内容到安装目录（含 dotfiles）
+    cp -r "$extracted_dir"/. "$INSTALL_PATH/"
     log_success "文件复制完成"
     
     # 验证关键目录结构
@@ -506,8 +542,16 @@ install_nodejs() {
     echo ""
     
     log_info "设置文件权限..."
-    chmod -R 755 "$INSTALL_PATH/bin"
-    chmod -R 755 "$INSTALL_PATH/lib" 2>/dev/null || true
+    # 按文件类型分别设置权限：可执行文件 755，普通文件 644，目录 755
+    if [ -d "$INSTALL_PATH/bin" ]; then
+        find "$INSTALL_PATH/bin" -type d -exec chmod 755 {} +
+        find "$INSTALL_PATH/bin" -type f -perm -u+x -exec chmod 755 {} +
+        find "$INSTALL_PATH/bin" -type f ! -perm -u+x -exec chmod 644 {} +
+    fi
+    if [ -d "$INSTALL_PATH/lib" ]; then
+        find "$INSTALL_PATH/lib" -type d -exec chmod 755 {} +
+        find "$INSTALL_PATH/lib" -type f -exec chmod 644 {} +
+    fi
     log_success "权限设置完成"
 
     log_success "Node.js 安装成功!"
@@ -528,7 +572,7 @@ configure_env_variables() {
     local env_line="export PATH=\"$INSTALL_PATH/bin:\$PATH\""
     
     # 检查是否已存在配置
-    if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
+    if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
         log_warn "环境变量已配置，跳过"
         return 0
     fi
@@ -563,11 +607,24 @@ show_install_info() {
     
     log_success "安装路径: $INSTALL_PATH"
     
-    local node_version=$("$INSTALL_PATH/bin/node" --version)
-    local npm_version=$("$INSTALL_PATH/bin/npm" --version)
-    
-    log_success "Node.js 版本: $node_version"
-    log_success "npm 版本: $npm_version"
+    local node_bin="$INSTALL_PATH/bin/node"
+    local npm_bin="$INSTALL_PATH/bin/npm"
+
+    if [[ -x "$node_bin" ]]; then
+        local node_version
+        node_version=$("$node_bin" --version 2>/dev/null || true)
+        log_success "Node.js 版本: ${node_version:-无法获取版本信息}"
+    else
+        echo -e "${YELLOW}警告: 未在 $node_bin 找到可执行的 node，Node.js 可能未正确安装。${NC}"
+    fi
+
+    if [[ -x "$npm_bin" ]]; then
+        local npm_version
+        npm_version=$("$npm_bin" --version 2>/dev/null || true)
+        log_success "npm 版本: ${npm_version:-无法获取版本信息}"
+    else
+        echo -e "${YELLOW}警告: 未在 $npm_bin 找到可执行的 npm，npm 可能未正确安装。${NC}"
+    fi
 
     echo ""
     echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
