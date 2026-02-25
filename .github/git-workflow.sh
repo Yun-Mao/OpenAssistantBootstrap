@@ -49,6 +49,10 @@ ${BLUE}=== OpenAssistant Git工作流自动化 ===${NC}
   submit <commit-message>       提交本地代码到远端并发起PR
                                 示例: ./git-workflow.sh submit "Add Python support"
 
+  merge [pr-number]             合并PR（不提供PR号则自动查找当前分支的PR）
+                                示例: ./git-workflow.sh merge
+                                示例: ./git-workflow.sh merge 2
+
   finalize                      同步main分支并清理feature分支
                                 （在PR合并后运行）
 
@@ -64,9 +68,12 @@ ${BLUE}=== OpenAssistant Git工作流自动化 ===${NC}
   # 3. 提交到远端并发起PR
   ./git-workflow.sh submit "Add Python offline installation tool"
 
-  # 4. 在GitHub上进行Code Review和合并
+  # 4. 在GitHub上进行Code Review
 
-  # 5. 同步和清理
+  # 5. 合并PR
+  ./git-workflow.sh merge
+
+  # 6. 同步和清理
   ./git-workflow.sh finalize
 
 EOF
@@ -170,8 +177,61 @@ submit_code() {
     
     echo -e "${YELLOW}下一步:${NC}"
     echo "1. 在GitHub上进行Code Review"
-    echo "2. PR合并后运行: ./git-workflow.sh finalize"
+    echo "2. 审核通过后运行: ./git-workflow.sh merge"
+    echo "3. 合并后运行: ./git-workflow.sh finalize"
     echo ""
+}
+
+# ==================== 合并PR ====================
+merge_pr() {
+    local pr_number="$1"
+    
+    check_git_status
+    
+    # 检查gh CLI是否安装
+    if ! command -v gh &> /dev/null; then
+        log_error "GitHub CLI (gh) 未安装，请先安装: https://cli.github.com"
+    fi
+    
+    local current_branch=$(get_current_branch)
+    
+    # 如果没有提供PR号，尝试查找当前分支的PR
+    if [ -z "$pr_number" ]; then
+        log_info "查找当前分支的PR..."
+        pr_number=$(gh pr view "$current_branch" --json number --jq .number 2>/dev/null || echo "")
+        
+        if [ -z "$pr_number" ]; then
+            log_error "未找到当前分支的PR，请指定PR号: ./git-workflow.sh merge <PR-number>"
+        fi
+    fi
+    
+    log_info "准备合并 PR #$pr_number..."
+    
+    # 显示PR信息
+    gh pr view "$pr_number" --json title,state,url --template '{{.title}} ({{.state}})
+{{.url}}
+' || log_error "无法获取PR信息"
+    
+    echo ""
+    read -p "确认要合并这个PR吗? [y/N] " -n 1 -r
+    echo ""
+    
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_warn "取消合并操作"
+        exit 0
+    fi
+    
+    # 合并PR
+    log_info "正在合并PR..."
+    if gh pr merge "$pr_number" --merge; then
+        log_success "✨ PR #$pr_number 已成功合并！"
+        echo ""
+        echo -e "${CYAN}下一步:${NC}"
+        echo "运行: ./git-workflow.sh finalize"
+        echo ""
+    else
+        log_error "PR合并失败，请检查是否有冲突或其他问题"
+    fi
 }
 
 # ==================== 合并后清理 ====================
@@ -179,6 +239,7 @@ finalize() {
     check_git_status
     
     local current_branch=$(get_current_branch)
+    local feature_branch="$current_branch"
     
     log_info "开始清理工作..."
     
@@ -192,13 +253,13 @@ finalize() {
     git pull origin main
     
     # 删除本地feature分支
-    if [ "$current_branch" != "main" ]; then
-        log_info "删除本地feature分支: $current_branch"
-        git branch -d "$current_branch" 2>/dev/null || git branch -D "$current_branch"
+    if [ "$feature_branch" != "main" ]; then
+        log_info "删除本地feature分支: $feature_branch"
+        git branch -d "$feature_branch" 2>/dev/null || git branch -D "$feature_branch"
         
-        # 删除远端追踪
-        log_info "删除远端追踪分支..."
-        git branch -D -r origin/"$current_branch" 2>/dev/null || true
+        # 删除远端feature分支
+        log_info "删除远端feature分支..."
+        git push origin --delete "$feature_branch" 2>/dev/null || true
     fi
     
     log_success "✨ 清理完成！"
@@ -240,6 +301,9 @@ main() {
             ;;
         submit)
             submit_code "$@"
+            ;;
+        merge)
+            merge_pr "$@"
             ;;
         finalize|cleanup)
             finalize

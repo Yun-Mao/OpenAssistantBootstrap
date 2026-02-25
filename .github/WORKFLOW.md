@@ -2,7 +2,7 @@
 
 ## 📋 快速开始
 
-### 三步完成开发周期
+### 四步完成开发周期
 
 ```bash
 # 1️⃣ 创建feature分支
@@ -11,7 +11,10 @@
 # 2️⃣ 开发完成后提交到远端
 ./.github/git-workflow.sh submit "Your feature description"
 
-# 3️⃣ PR合并后进行清理
+# 3️⃣ 审核通过后合并PR
+./.github/git-workflow.sh merge
+
+# 4️⃣ 合并后进行清理
 ./.github/git-workflow.sh finalize
 ```
 
@@ -102,25 +105,31 @@ chore/task-name          # 构建/工具相关分支
 ### 自动化脚本处理的步骤：
 
 ```bash
-./scripts/git-workflow.sh start feat/python-installer
+./.github/git-workflow.sh start feat/python-installer
   ↓
 # [开发工作...]
   ↓
-./scripts/git-workflow.sh submit "Add Python support"
+./.github/git-workflow.sh submit "Add Python support"
   ↓
 # [脚本自动]:
 # 1. git push -u origin feat/python-installer
-# 2. 输出PR创建链接
+# 2. 创建Pull Request
   ↓
-# [用户在GitHub上]: Code Review & Merge
+# [用户在GitHub上]: Code Review
   ↓
-./scripts/git-workflow.sh finalize
+./.github/git-workflow.sh merge
+  ↓
+# [脚本自动]:
+# 1. 确认PR信息
+# 2. 合并PR到main分支
+  ↓
+./.github/git-workflow.sh finalize
   ↓
 # [脚本自动]:
 # 1. git checkout main
 # 2. git pull origin main
 # 3. git branch -d feat/python-installer
-# 4. 删除远端追踪
+# 4. 删除远端feature分支
 ```
 
 ## 💻 脚本命令详解
@@ -144,10 +153,22 @@ chore/task-name          # 构建/工具相关分支
 # 脚本执行:
 # ✓ 检查当前分支不是main
 # ✓ 推送代码到remote
-# ✓ 输出PR创建链接
+# ✓ 创建Pull Request
+# ✓ 输出PR链接
 ```
 
-### 3. 合并后清理
+### 3. 合并PR
+
+```bash
+./.github/git-workflow.sh merge [pr-number]
+
+# 脚本执行:
+# ✓ 查找当前分支的PR（或使用指定PR号）
+# ✓ 显示PR信息供确认
+# ✓ 合并PR到main分支
+```
+
+### 4. 合并后清理
 
 ```bash
 ./.github/git-workflow.sh finalize
@@ -156,7 +177,7 @@ chore/task-name          # 构建/工具相关分支
 # ✓ 切换到main分支
 # ✓ 同步远端最新内容
 # ✓ 删除本地feature分支
-# ✓ 删除远端追踪分支
+# ✓ 删除远端feature分支
 ```
 
 ## 🔧 脚本使用场景
@@ -175,7 +196,10 @@ git commit -m "test: add unit tests"
 # 提交到远端
 ./.github/git-workflow.sh submit "Implement new tool with documentation"
 
-# ... 在GitHub完成review和merge ...
+# ... 在GitHub完成review ...
+
+# 合并PR
+./.github/git-workflow.sh merge
 
 # 清理
 ./.github/git-workflow.sh finalize
@@ -196,7 +220,10 @@ git commit -m "fix: resolve PATH variable issue
 # 推送PR
 ./.github/git-workflow.sh submit "Fix PATH variable handling"
 
-# ... review和merge ...
+# ... review ...
+
+# 合并PR
+./.github/git-workflow.sh merge
 
 # 清理
 ./.github/git-workflow.sh finalize
@@ -212,7 +239,10 @@ git commit -m "docs: improve installation guide with examples"
 
 ./.github/git-workflow.sh submit "Improve documentation clarity"
 
-# ... review和merge ...
+# ... review ...
+
+# 合并PR
+./.github/git-workflow.sh merge
 
 ./.github/git-workflow.sh finalize
 ```

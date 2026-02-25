@@ -6,7 +6,7 @@
 ./.github/git-workflow.sh start feat/name
 git commit -m "feat: ..."
 ./.github/git-workflow.sh submit "Description"
-# [PR审核合并]
+./.github/git-workflow.sh merge
 ./.github/git-workflow.sh finalize
 ```
 
@@ -20,6 +20,11 @@ git commit -m "feat: ..."
 ### 提交代码到远端
 ```bash
 ./.github/git-workflow.sh submit "Your feature description"
+```
+
+### 合并PR
+```bash
+./.github/git-workflow.sh merge
 ```
 
 ### 合并后清理
@@ -61,8 +66,7 @@ git commit -m "refactor: improve code structure"
 | 需求 | 命令 |
 |------|------|
 | 创建feature分支 | `./.github/git-workflow.sh start feat/name` |
-| 推送到远端 | `./.github/git-workflow.sh submit "desc"` |
-| PR合并后清理 | `./.github/git-workflow.sh finalize` |
+| 推送到远端 | `./.github/git-workflow.sh submit "desc"` || 合并PR | `./.github/git-workflow.sh merge` || PR合并后清理 | `./.github/git-workflow.sh finalize` |
 | 查看帮助 | `./.github/git-workflow.sh --help` |
 | 查看完整文档 | `cat .github/WORKFLOW.md` |
 
@@ -72,6 +76,7 @@ git commit -m "refactor: improve code structure"
 - "提交XXX功能" → 我自动执行start、开发指导、submit
 - "git start feat/xxx" → 创建分支
 - "git submit" → 推送到远端
+- "git merge" → 合并 PR
 - "git finalize" → 清理
 
 无需重复解释整个流程！✨
