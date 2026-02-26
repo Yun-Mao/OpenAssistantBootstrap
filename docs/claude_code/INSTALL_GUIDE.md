@@ -11,6 +11,7 @@
 - ✅ SHA256 校验和验证
 - ✅ 不需要 root 权限
 - ✅ 支持多平台（linux-x64、linux-arm64、darwin 等）
+- ✅ 支持 Bash/Zsh 和 Csh/Tcsh 环境配置
 
 ## 安装模式
 
@@ -169,7 +170,12 @@ chmod +x scripts/install_patch_tools.sh
 **Q: 安装后如何验证？**
 
 ```bash
+# Bash/Zsh
 source ~/.bashrc
+claude --version
+
+# Csh/Tcsh
+source ~/.cshrc
 claude --version
 ```
 

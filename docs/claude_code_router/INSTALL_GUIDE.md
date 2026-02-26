@@ -263,8 +263,14 @@ ccr --version
 npm bin -g
 
 # 将其添加到 PATH（如需）
+
+# Bash/Zsh:
 echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.bashrc
 source ~/.bashrc
+
+# Csh/Tcsh:
+echo 'setenv PATH "$(npm bin -g):$PATH"' >> ~/.cshrc
+source ~/.cshrc
 ```
 
 ## 验证安装
@@ -355,8 +361,14 @@ npm bin -g
 npm list -g @musistudio/claude-code-router
 
 # 如需将 npm global bin 加入 PATH
+
+# Bash/Zsh:
 echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.bashrc
 source ~/.bashrc
+
+# Csh/Tcsh:
+echo 'setenv PATH "$(npm bin -g):$PATH"' >> ~/.cshrc
+source ~/.cshrc
 ```
 
 ## 卸载说明

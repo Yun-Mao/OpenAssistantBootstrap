@@ -363,6 +363,7 @@ ${BLUE}=== Claude Code 离线安装脚本 ===${NC}
   • 交互式选择安装模式
   • 自动识别 packages/ 目录中的离线安装包
   • 无需 root 权限，完全用户级别安装
+  • 支持 Bash/Zsh 和 Csh/Tcsh 环境配置
 
 示例:
   ./install_claude_code.sh
@@ -579,13 +580,16 @@ uninstall_claude_code() {
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
 
-    local bash_config="$HOME/.bashrc"
     local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
     local end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local deleted_any=false
 
+    # 删除 bash 配置
+    local bash_config="$HOME/.bashrc"
     if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
-        log_info "检测到环境变量配置，正在删除..."
+        log_info "检测到 Bash 环境变量配置，正在删除..."
 
+        # 使用行号范围删除标记块（避免 marker 中正则元字符的干扰）
         local start_line end_line
         start_line=$(grep -nF "$start_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
         end_line=$(grep -nF "$end_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
@@ -599,18 +603,49 @@ uninstall_claude_code() {
             fi
             sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$bash_config"
             sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$bash_config"
-            log_success "环境变量配置已删除"
+
+            log_success "Bash 环境变量配置已删除"
             echo ""
             echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
             echo "  source ~/.bashrc"
+            deleted_any=true
         else
-            log_info "未找到完整的环境变量标记块，跳过自动删除"
+            log_info "未找到完整的 Bash 环境变量标记块，跳过自动删除"
         fi
-    else
+    fi
+
+    # 删除 csh 配置
+    for csh_config in "$HOME/.cshrc" "$HOME/.login"; do
+        if [ -f "$csh_config" ] && grep -Fq "$start_marker" "$csh_config" 2>/dev/null; then
+            log_info "检测到 Csh 环境变量配置在 $csh_config，正在删除..."
+
+            local start_line end_line
+            start_line=$(grep -nF "$start_marker" "$csh_config" | head -n1 | cut -d: -f1 || true)
+            end_line=$(grep -nF "$end_marker" "$csh_config" | head -n1 | cut -d: -f1 || true)
+
+            if [[ -n "$start_line" && -n "$end_line" && "$end_line" -ge "$start_line" ]]; then
+                local sed_inplace
+                if sed --version >/dev/null 2>&1; then
+                    sed_inplace=(-i)
+                else
+                    sed_inplace=(-i '')
+                fi
+                sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$csh_config"
+                sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$csh_config"
+
+                log_success "Csh 环境变量配置已从 $csh_config 删除"
+                deleted_any=true
+            else
+                log_info "未找到完整的 Csh 环境变量标记块，跳过自动删除"
+            fi
+        fi
+    done
+
+    if [ "$deleted_any" = false ]; then
         log_info "未找到自动配置的环境变量"
         echo ""
         echo -e "${YELLOW}提示:${NC} 如果您手动配置了环境变量，请手动删除:"
-        echo "  编辑 ~/.bashrc，移除包含 '$INSTALL_PATH' 的 PATH 配置行"
+        echo "  编辑 ~/.bashrc 或 ~/.cshrc，移除包含 '$INSTALL_PATH' 的 PATH 配置行"
     fi
 
     echo ""
@@ -681,10 +716,12 @@ update_config() {
             local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
             if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
                 log_warn "环境变量已经配置过了"
-            elif confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+            elif confirm_action "是否自动配置环境变量?"; then
                 configure_env_variables
+                echo ""
                 echo -e "${YELLOW}请运行以下命令使配置生效:${NC}"
-                echo "  source ~/.bashrc"
+                echo "  Bash/Zsh: source ~/.bashrc"
+                echo "  Csh/Tcsh: source ~/.cshrc"
             fi
             ;;
         2)
@@ -1091,35 +1128,116 @@ install_claude_code() {
     show_install_info
 }
 
-# 配置环境变量到 bashrc
-configure_env_variables() {
-    local bash_config="$HOME/.bashrc"
-    local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
-    local end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
-    local env_line="export PATH=\"$INSTALL_PATH/bin:\$PATH\""
+# 检测用户默认 shell
+detect_user_shell() {
+    # 检查 SHELL 环境变量
+    if [ -n "$SHELL" ]; then
+        case "$SHELL" in
+            */csh|*/tcsh)
+                echo "csh"
+                return 0
+                ;;
+            */bash)
+                echo "bash"
+                return 0
+                ;;
+            */zsh)
+                echo "zsh"
+                return 0
+                ;;
+        esac
+    fi
+    # 默认返回 bash
+    echo "bash"
+    return 0
+}
 
-    if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
-        log_warn "环境变量已配置，跳过"
-        return 0
+# 配置环境变量到 shell 配置文件
+configure_env_variables() {
+    local user_shell
+    user_shell=$(detect_user_shell)
+
+    log_info "检测到当前 shell: $SHELL"
+
+    local configured_any=false
+
+    # 配置 bash/zsh
+    local bash_config="$HOME/.bashrc"
+    local bash_start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local bash_end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local bash_env_line="export PATH=\"$INSTALL_PATH/bin:\$PATH\""
+
+    if [[ "$user_shell" =~ (bash|zsh) ]] || confirm_action "是否配置 bash/zsh 环境变量?"; then
+        # 检查是否已存在配置
+        if grep -Fq "$bash_start_marker" "$bash_config" 2>/dev/null; then
+            log_warn "Bash 环境变量已配置，跳过"
+        else
+            log_info "添加环境变量到 $bash_config"
+
+            # 添加带注释标记的环境变量
+            {
+                echo ""
+                echo "$bash_start_marker"
+                echo "$bash_env_line"
+                echo "$bash_end_marker"
+            } >> "$bash_config"
+
+            log_success "Bash 环境变量已配置"
+            configured_any=true
+        fi
     fi
 
-    log_info "添加环境变量到 $bash_config"
+    # 配置 csh/tcsh
+    local csh_config="$HOME/.cshrc"
+    local csh_config_user="$HOME/.login"
+    local csh_start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local csh_end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local csh_env_line="setenv PATH \"$INSTALL_PATH/bin:\$PATH\""
 
-    {
+    if [[ "$user_shell" == "csh" ]] || confirm_action "是否配置 csh/tcsh 环境变量?"; then
+        # 优先使用 .cshrc，如果不存在则检查 .login
+        local target_csh_config=""
+        if [ -f "$csh_config" ]; then
+            target_csh_config="$csh_config"
+        elif [ -f "$csh_config_user" ]; then
+            target_csh_config="$csh_config_user"
+        else
+            # 默认使用 .cshrc
+            target_csh_config="$csh_config"
+        fi
+
+        # 检查是否已存在配置
+        if grep -Fq "$csh_start_marker" "$target_csh_config" 2>/dev/null; then
+            log_warn "Csh 环境变量已配置，跳过"
+        else
+            log_info "添加环境变量到 $target_csh_config"
+
+            # 添加带注释标记的环境变量
+            {
+                echo ""
+                echo "$csh_start_marker"
+                echo "$csh_env_line"
+                echo "$csh_end_marker"
+            } >> "$target_csh_config"
+
+            log_success "Csh 环境变量已配置到 $target_csh_config"
+            configured_any=true
+        fi
+    fi
+
+    if [ "$configured_any" = true ]; then
         echo ""
-        echo "$start_marker"
-        echo "$env_line"
-        echo "$end_marker"
-    } >> "$bash_config"
+        echo -e "${YELLOW}重要提示:${NC}"
+        echo -e "  请勿在以下标记之间添加或修改内容："
+        echo -e "  ${CYAN}$bash_start_marker${NC}"
+        echo -e "  ${CYAN}$bash_end_marker${NC}"
+        echo -e "  ${CYAN}$csh_start_marker${NC}"
+        echo -e "  ${CYAN}$csh_end_marker${NC}"
+        echo -e "  卸载时将自动删除这些标记之间的所有内容"
+        echo ""
+    fi
 
-    log_success "环境变量已配置"
-    echo ""
-    echo -e "${YELLOW}重要提示:${NC}"
-    echo -e "  请勿在以下标记之间添加或修改内容："
-    echo -e "  ${CYAN}$start_marker${NC}"
-    echo -e "  ${CYAN}$end_marker${NC}"
-    echo -e "  卸载时将自动删除这些标记之间的所有内容"
-    echo ""
+    return 0
 }
 
 # 显示安装信息
@@ -1155,20 +1273,27 @@ show_install_info() {
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
 
-    if confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+    if confirm_action "是否自动配置环境变量?"; then
         configure_env_variables
+        echo ""
         echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
-        echo "   source ~/.bashrc"
+        echo "   Bash/Zsh: source ~/.bashrc"
+        echo "   Csh/Tcsh: source ~/.cshrc"
         echo ""
     else
         echo -e "${YELLOW}手动配置环境变量:${NC}"
+        echo ""
+        echo "   Bash/Zsh:"
         echo "   echo 'export PATH=\"$INSTALL_PATH/bin:\$PATH\"' >> ~/.bashrc"
         echo "   source ~/.bashrc"
+        echo ""
+        echo "   Csh/Tcsh:"
+        echo "   echo 'setenv PATH \"$INSTALL_PATH/bin:\$PATH\"' >> ~/.cshrc"
+        echo "   source ~/.cshrc"
         echo ""
     fi
 
     echo -e "${YELLOW}验证安装:${NC}"
-    echo "   source ~/.bashrc"
     echo "   claude --version"
     echo ""
 }
