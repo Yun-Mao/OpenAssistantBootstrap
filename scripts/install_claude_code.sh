@@ -797,7 +797,7 @@ prompt_npm_package_path() {
         default_pkg=$(find "$DEFAULT_PKG_DIR" -maxdepth 2 -type f \( \
             -name "anthropic-claude-code-*.tgz" \
             -o -name "anthropic-claude-code-*.tar.gz" \
-            -o -name "@anthropic-ai-claude-code-*.tgz" \
+            -o -name "anthropic-ai-claude-code-*.tgz" \
         \) 2>/dev/null | sort -rV | head -1)
     fi
 

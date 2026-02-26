@@ -138,7 +138,7 @@ pack_via_npm() {
     if npm pack "$NPM_PACKAGE" 2>&1 | tee -a "$LOG_FILE"; then
         # 查找下载的 tarball
         local tarball
-        tarball=$(ls -1 anthropic-claude-code-*.tgz 2>/dev/null | sort -V | tail -1)
+        tarball=$(ls -1 anthropic-ai-claude-code-*.tgz 2>/dev/null | sort -V | tail -1)
 
         if [ -z "$tarball" ]; then
             log_error "未找到 npm 下载的 tarball"

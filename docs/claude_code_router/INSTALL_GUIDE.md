@@ -269,7 +269,9 @@ echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
 # Csh/Tcsh:
-echo 'setenv PATH "`npm bin -g`:$PATH"' >> ~/.cshrc
+# 注意：Csh 不支持直接在命令行中执行命令替换，需要先获取路径
+set npm_bin = `npm bin -g`
+echo "setenv PATH \"$npm_bin:\$PATH\"" >> ~/.cshrc
 source ~/.cshrc
 ```
 
@@ -367,7 +369,9 @@ echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
 # Csh/Tcsh:
-echo 'setenv PATH "`npm bin -g`:$PATH"' >> ~/.cshrc
+# 注意：Csh 不支持直接在命令行中执行命令替换，需要先获取路径
+set npm_bin = `npm bin -g`
+echo "setenv PATH \"$npm_bin:\$PATH\"" >> ~/.cshrc
 source ~/.cshrc
 ```
 
