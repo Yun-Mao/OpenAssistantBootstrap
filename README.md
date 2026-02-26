@@ -54,6 +54,13 @@
 - 💡 **特点**: 官方预编译独立二进制，无需 Node.js
 - 🧩 **可选 Patch**: 低版本 glibc 环境自动检测并使用 patchelf + glibc 2.31 修复运行
 
+### Claude Code Router
+
+- 📍 **文档位置**: [docs/claude_code_router/](docs/claude_code_router/)
+- 🔧 **官方项目**: [musistudio/claude-code-router](https://github.com/musistudio/claude-code-router)
+- 💡 **特点**: 社区开源 Node.js 应用，支持多提供商路由、动态模型切换、灵活配置
+- 🚀 **特性**: 模型路由、请求转换、CLI 管理、GitHub Actions 集成
+
 ## 快速开始
 
 ### Node.js 安装
@@ -163,6 +170,49 @@ claude --version
 
 详见 [Claude Code 安装指南](docs/claude_code/INSTALL_GUIDE.md)
 
+### Claude Code Router 安装
+
+Claude Code Router 是社区开源的 Node.js 应用，**需要 Node.js 16+**，用于智能路由 Claude Code 请求到不同的 AI 模型提供商。
+
+#### 1. 前置条件
+
+确保已安装 Node.js 和 Claude Code：
+
+```bash
+node --version    # 应显示 v16.0.0 或更高
+npm --version     # 应显示 8.0.0 或更高
+claude --version  # 应显示版本号
+```
+
+#### 2. 安装方式
+
+**方式 A：直接从 npm 官方源安装（推荐）**
+
+```bash
+npm install -g @musistudio/claude-code-router
+```
+
+**方式 B：离线安装**
+
+在有网络的机器上：
+```bash
+npm pack @musistudio/claude-code-router --pack-destination ./packages/
+```
+
+在离线机器上：
+```bash
+npm install -g ./packages/musistudio-claude-code-router-*.tgz
+```
+
+#### 3. 验证安装
+
+```bash
+ccr --version
+ccr --help
+```
+
+详见 [Claude Code Router 安装指南](docs/claude_code_router/INSTALL_GUIDE.md)
+
 ## 文档
 
 - [Node.js 详细安装指南](docs/nodejs/INSTALL_GUIDE.md)
@@ -171,6 +221,9 @@ claude --version
 - [Claude Code 详细安装指南](docs/claude_code/INSTALL_GUIDE.md)
 - [Claude Code 交互式安装指南](docs/claude_code/INTERACTIVE_INSTALL.md)
 - [Claude Code 快速参考](docs/claude_code/QUICK_REFERENCE.md)
+- [Claude Code Router 详细安装指南](docs/claude_code_router/INSTALL_GUIDE.md)
+- [Claude Code Router 交互式安装指南](docs/claude_code_router/INTERACTIVE_INSTALL.md)
+- [Claude Code Router 快速参考](docs/claude_code_router/QUICK_REFERENCE.md)
 
 ## 命令参考
 
@@ -192,12 +245,28 @@ claude --version
 ./scripts/install_claude_code.sh
 ```
 
+### 运行 Claude Code Router 脚本
+
+```bash
+# 方式 1：打包离线安装包（有网机器）
+./scripts/pack_claude_code_router.sh
+
+# 方式 2：安装 Claude Code Router（离线机器或直接安装）
+./scripts/install_claude_code_router.sh
+```
+
+脚本提供完整的打包和安装解决方案：
+- **pack 脚本**：生成离线安装包，支持 npm/GitHub/本地等多种方式
+- **install 脚本**：交互式安装，支持卸载和配置更新
+
 ### 显示帮助
 
 ```bash
 ./scripts/install_nodejs.sh --help
 ./scripts/fetch_claude_code.sh --help
 ./scripts/install_claude_code.sh --help
+./scripts/pack_claude_code_router.sh --help
+./scripts/install_claude_code_router.sh --help
 ```
 
 显示脚本使用说明和功能介绍。
@@ -245,6 +314,33 @@ claude --version
 - 无需 Node.js，独立二进制直接运行
 - 智能默认值（路径：$HOME/claude-code）
 - 自动包检测（优先最新版）
+
+### install_claude_code_router.sh
+
+**功能:**
+- 通过 npm 包管理器安装 Claude Code Router
+- 交互式配置向导
+- 自动验证 Node.js 和 Claude Code 环境
+- 支持离线 npm 包安装
+
+**核心特性:**
+- Node.js 应用，需要 Node.js 16+ 环境
+- 支持全局和本地安装
+- 交互式配置流程
+- 自动依赖检测
+
+### pack_claude_code_router.sh
+
+**功能:**
+- 从 npm 官方源下载 Claude Code Router
+- 自动保存为离线安装包到 packages/ 目录
+- 验证包文件完整性
+
+**核心特性:**
+- 纯 npm 下载方式，快速可靠
+- 仅需 npm 工具
+- 自动生成 MD5 校验和
+- 显示包文件信息和内容预览
 
 ## 扩展性设计
 
