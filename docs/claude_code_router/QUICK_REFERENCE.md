@@ -10,7 +10,7 @@ cd OpenAssistantBootstrap
 chmod +x scripts/install_claude_code_router.sh
 
 # 3. 将离线包放入 packages 目录
-cp /path/to/claude-code-router-*.tar.gz packages/
+cp /path/to/musistudio-claude-code-router-*.tgz packages/
 
 # 4. 运行安装
 ./scripts/install_claude_code_router.sh
@@ -44,16 +44,7 @@ claude-code-router --version
 # 菜单选择：2
 ```
 
-**自动删除**: 安装目录、环境变量、安装记录
-
-### 更新配置
-
-```bash
-./scripts/install_claude_code_router.sh
-# 菜单选择：3
-```
-
-**常见操作**: 配置环境变量、查看版本信息
+**自动执行**: `npm uninstall -g @musistudio/claude-code-router`
 
 ### 显示帮助
 
@@ -67,139 +58,64 @@ claude-code-router --version
 
 - [ ] 系统：Linux (CentOS 7, Ubuntu, Debian 等)
 - [ ] 权限：普通用户（无需 root）
-- [ ] 工具：tar, unzip, bash 4.0+（通常预装）
-- [ ] 磁盘：≥ 100MB 自由空间
-- [ ] 离线包：.tar.gz / .tar.xz / .zip 格式
+- [ ] Node.js: v16.0.0+
+- [ ] npm: 8.0.0+
+- [ ] 磁盘：≥ 50MB 自由空间
+- [ ] 离线包：`musistudio-claude-code-router-*.tgz` (npm 打包格式)
 
 命令验证：
 ```bash
-# 检查 bash 版本
-bash --version
-
-# 检查必要工具
-command -v tar && command -v unzip && command -v find
+node --version
+npm --version
 ```
-
----
-
-## 环境变量配置
-
-### 自动配置
-
-安装完成后选择 `y`，脚本自动添加到 `~/.bashrc`：
-
-```bash
-# >>> Claude Code Router Environment Variables >>>
-export PATH="/home/user/claude-code-router/bin:$PATH"
-# <<< Claude Code Router Environment Variables <<<
-```
-
-### 手动配置（如需）
-
-```bash
-# 编辑配置文件
-cat >> ~/.bashrc << 'EOF'
-
-export PATH="$HOME/claude-code-router/bin:$PATH"
-EOF
-
-# 应用配置
-source ~/.bashrc
-```
-
-### 验证配置
-
-```bash
-# 检查 PATH
-echo $PATH | grep claude-code-router
-
-# 检查命令位置
-which claude-code-router
-
-# 运行命令
-claude-code-router --version
-```
-
----
 
 ## 离线包信息
 
 ### 文件名格式
 
+npm 打包格式：
 ```
-claude-code-router-<版本>-<平台>.tar.gz
-claude-code-router-<版本>-<平台>.tar.xz
-claude-code-router-<版本>-<平台>.zip
+musistudio-claude-code-router-<版本>.tgz
 ```
 
 ### 示例文件名
 
-- `claude-code-router-1.0.0-x86_64-linux.tar.gz`（64位 Intel/AMD）
-- `claude-code-router-1.0.0-aarch64-linux.tar.xz`（ARM64）
-- `claude-code-router-1.0.0-x86_64-linux.zip`（Windows 兼容压缩）
-
-### 支持的架构
-
-| 架构 | 文件名标识 |
-|------|-----------|
-| x86_64 (Intel/AMD 64位) | `x86_64` |
-| ARM64 (阿里云飞天等) | `aarch64` / `arm64` |
-| 其他 | 按官方标识 |
+- `musistudio-claude-code-router-1.0.40.tgz`
 
 ### 文件验证
 
 ```bash
-# 查看压缩包内容（不解压）
-tar -tzf claude-code-router-*.tar.gz | head -20
-
-# 列出关键文件
-tar -tzf claude-code-router-*.tar.gz | grep "bin/claude-code-router"
+# 查看包内容（不解压）
+tar -tzf musistudio-claude-code-router-*.tgz | head -20
 
 # 检查文件大小
-ls -lh claude-code-router-*.tar.gz
+ls -lh musistudio-claude-code-router-*.tgz
 ```
 
 ---
 
-## 安装目录结构
+## npm 全局安装说明
 
-```
-claude-code-router-1.0.0-x86_64-linux/
-├── bin/
-│   └── claude-code-router          # 主可执行文件
-├── lib/
-│   ├── libfoo.so.1                 # 依赖库
-│   └── ...
-├── README.md                        # 项目说明
-├── LICENSE                          # 许可证
-└── ...
-```
-
-安装后（默认路径）:
-```
-~/claude-code-router/
-├── bin/
-│   └── claude-code-router
-├── lib/
-├── README.md
-└── ...
-```
+npm 全局安装会自动处理 PATH：
+- 可执行文件链接到 npm 的全局 bin 目录
+- 安装成功后无需手动配置 PATH
+- 可用 `npm bin -g` 查看全局 bin 目录位置
 
 ---
 
 ## 常见问题快速解决
 
-### 找不到压缩包
+### 找不到离线包
 
 ```bash
 # 检查 packages 目录
 ls -la packages/
 
 # 手动复制文件
-cp /path/to/claude-code-router-*.tar.gz packages/
+cp /path/to/musistudio-claude-code-router-*.tgz packages/
 
 # 或在提示时输入完整路径
-/home/user/Downloads/claude-code-router-1.0.0-x86_64-linux.tar.gz
+/home/user/Downloads/musistudio-claude-code-router-1.0.40.tgz
 ```
 
 ### 权限错误
@@ -207,41 +123,30 @@ cp /path/to/claude-code-router-*.tar.gz packages/
 ```bash
 # 修复脚本权限
 chmod +x scripts/install_claude_code_router.sh
-
-# 修复包文件权限
-chmod +r packages/claude-code-router-*.tar.gz
-
-# 使用用户有权限的路径（如 $HOME）
-# 在安装时选择 /home/username/claude-code-router
 ```
 
 ### 命令未找到
 
 ```bash
-# 应用配置
-source ~/.bashrc
+# 查看 npm 全局 bin 目录
+npm bin -g
 
-# 验证 PATH
-echo $PATH
+# 确认 ccr 是否已安装
+npm list -g @musistudio/claude-code-router
 
-# 直接使用完整路径
-~/claude-code-router/bin/claude-code-router --version
-
-# 重新手动配置
-echo 'export PATH="$HOME/claude-code-router/bin:$PATH"' >> ~/.bashrc
+# 如需将 npm global bin 加入 PATH
+echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 文件缺失错误
+### 安装失败
 
 ```bash
-# 检查压缩包完整性
-tar -tzf packages/claude-code-router-*.tar.gz | wc -l
+# 检查 npm 包是否完整
+tar -tzf packages/musistudio-claude-code-router-*.tgz | head -20
 
-# 验证关键文件存在
-tar -tzf packages/claude-code-router-*.tar.gz | grep "bin/claude-code-router"
-
-# 重新下载官方包
+# 重新下载离线包
+./scripts/pack_claude_code_router.sh
 ```
 
 ---
@@ -251,24 +156,21 @@ tar -tzf packages/claude-code-router-*.tar.gz | grep "bin/claude-code-router"
 ### 安装前
 
 ```bash
-$ which claude-code-router
+$ which ccr
 # (无输出或找不到)
 
-$ echo $PATH
-# /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:...
+$ npm list -g @musistudio/claude-code-router
+# (empty)
 ```
 
 ### 安装后
 
 ```bash
-$ which claude-code-router
-/home/user/claude-code-router/bin/claude-code-router
+$ which ccr
+/home/user/.npm-global/bin/ccr
 
-$ echo $PATH
-/home/user/claude-code-router/bin:/usr/local/sbin:/usr/local/bin:...
-
-$ claude-code-router --version
-Claude Code Router version 1.0.0
+$ ccr --version
+1.0.40
 ```
 
 ---
@@ -316,20 +218,17 @@ source ~/.bashrc
 
 ## 多版本安装
 
-如果需要保留多个版本：
+使用 npm 管理版本：
 
 ```bash
-# 版本 1.0
-./scripts/install_claude_code_router.sh
-# 步骤 2：输入 /home/user/ccr-1.0
+# 安装指定版本
+npm install -g @musistudio/claude-code-router@1.0.40
 
-# 版本 1.1
-./scripts/install_claude_code_router.sh
-# 步骤 2：输入 /home/user/ccr-1.1
+# 查看当前版本
+npm list -g @musistudio/claude-code-router
 
-# 切换版本（在 ~/.bashrc 中修改）
-export PATH="/home/user/ccr-1.1/bin:$PATH"
-source ~/.bashrc
+# 升级到最新版
+npm install -g @musistudio/claude-code-router@latest
 ```
 
 ---
@@ -351,16 +250,10 @@ source ~/.bashrc
 
 ```bash
 # 显示版本
-claude-code-router --version
+ccr --version
 
 # 显示帮助
-claude-code-router --help
-
-# 显示配置
-claude-code-router config show  # 如果支持
-
-# 列出可用命令
-claude-code-router -h
+ccr --help
 ```
 
 ---
@@ -369,10 +262,7 @@ claude-code-router -h
 
 | 文件/目录 | 描述 |
 |----------|------|
-| `~/.bashrc` | 环境变量配置 |
-| `~/.claude_code_router_install_record` | 安装记录（路径） |
 | `/tmp/claude_code_router_install_*.log` | 安装日志 |
-| `~/claude-code-router/` | 默认安装目录 |
 | `packages/` | 离线包存放目录 |
 
 ---
@@ -392,22 +282,6 @@ echo "=== Arch ===" && uname -m
 
 ## 进阶选项
 
-### 自定义安装路径（NAS、共享存储等）
-
-```bash
-./scripts/install_claude_code_router.sh
-# 步骤 2：输入 /mnt/nas/software/ccr
-```
-
-### 系统级安装（需要 sudo）
-
-```bash
-sudo mkdir -p /opt/claude-code-router
-sudo chmod 755 /opt/claude-code-router
-./scripts/install_claude_code_router.sh
-# 步骤 2：输入 /opt/claude-code-router
-```
-
 ### 查看完整脚本日志
 
 ```bash
@@ -424,7 +298,7 @@ bash -x scripts/install_claude_code_router.sh 2>&1 | tee install.log
 | 详细指南 | [INSTALL_GUIDE.md](INSTALL_GUIDE.md) |
 | 交互式演示 | [INTERACTIVE_INSTALL.md](INTERACTIVE_INSTALL.md) |
 | 脚本帮助 | `./scripts/install_claude_code_router.sh --help` |
-| 官方文档 | [Claude Code Router Repository](https://github.com/anthropic/claude-code-router) |
+| 官方文档 | [Claude Code Router Repository](https://github.com/musistudio/claude-code-router) |
 
 ---
 
@@ -440,10 +314,9 @@ bash -x scripts/install_claude_code_router.sh 2>&1 | tee install.log
 # 完整安装（从克隆到验证）
 cd OpenAssistantBootstrap && \
 chmod +x scripts/install_claude_code_router.sh && \
-cp ~/Downloads/claude-code-router-*.tar.gz packages/ && \
+cp ~/Downloads/musistudio-claude-code-router-*.tgz packages/ && \
 ./scripts/install_claude_code_router.sh && \
-source ~/.bashrc && \
-claude-code-router --version
+ccr --version
 
 # 完全卸载
 ./scripts/install_claude_code_router.sh && \
@@ -451,10 +324,10 @@ source ~/.bashrc && \
 echo "Uninstall complete"
 
 # 诊断安装状态
-echo "=== Installed ===" && \
-ls -lh ~/claude-code-router/bin/ 2>/dev/null && \
+echo "=== npm list ===" && \
+npm list -g @musistudio/claude-code-router && \
 echo "=== Version ===" && \
-claude-code-router --version 2>/dev/null && \
+ccr --version 2>/dev/null && \
 echo "=== PATH ===" && \
-which claude-code-router
+which ccr
 ```

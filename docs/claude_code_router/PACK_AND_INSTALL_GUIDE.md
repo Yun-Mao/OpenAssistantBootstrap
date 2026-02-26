@@ -75,28 +75,21 @@ chmod +x scripts/install_claude_code_router.sh
    ```
    1. 安装 Claude Code Router
    2. 卸载 Claude Code Router
-   3. 更新配置
    0. 退出
    ```
    选择 `1` 进行安装
 
-2. **检测现有安装** - 如果已安装，显示版本和路径
+2. **检测现有安装** - 如果已安装，显示版本
 
-3. **选择安装路径** - 默认 `$HOME/claude-code-router`，可自定义
+3. **选择离线包** - 自动在 `packages/` 目录查找 `.tgz` 文件，或手动指定路径
 
-4. **选择压缩包** - 自动在 `packages/` 目录查找，或手动指定路径
+4. **确认安装信息** - 显示离线包路径和安装方式，最后确认
 
-5. **确认安装信息** - 显示源包和目标路径，最后确认
+5. **npm install -g** - 执行全局安装
 
-6. **自动安装** - 依次：
-   - 检查目标路径
-   - 创建安装目录
-   - 解压压缩包
-   - 复制文件
-   - 设置权限
-   - 验证安装
+6. **验证安装** - 运行 `ccr --version` 验证
 
-7. **配置环境变量** - 自动添加到 `~/.bashrc`
+7. **完成** - 显示使用提示
 
 #### 步骤 4: 验证安装
 
@@ -127,7 +120,7 @@ npm install -g @musistudio/claude-code-router
 
 ## 打包脚本详细说明（pack_claude_code_router.sh)
 
-### 打包脚本的工工作原理
+### 打包脚本的工作原理
 
 打包脚本使用 `npm pack` 从 npm 官方源下载 Claude Code Router 的最新版本：
 
@@ -162,83 +155,44 @@ packages/musistudio-claude-code-router-<version>.tgz
 
 ```
 1. 安装 Claude Code Router         - 完整的交互式安装流程
-2. 卸载 Claude Code Router         - 彻底移除已安装版本
-3. 更新配置                        - 配置环境变量或查看信息
+2. 卸载 Claude Code Router         - 通过 npm uninstall -g 移除
 0. 退出
 ```
 
 ### 安装流程（选项 1）
 
-#### 步骤 1: 检测现有安装
+#### 步骤 1: 检查环境要求
 
-- 通过 PATH 搜索现有 `claude-code-router`
-- 查询安装记录文件
-- 如果已安装，显示版本和路径
+验证 Node.js 和 npm 已安装且版本满足要求。
 
-#### 步骤 2: 选择安装路径
+#### 步骤 2: 检测现有安装
 
-**默认值：** `$HOME/claude-code-router`
+通过 `npm list -g @musistudio/claude-code-router` 检查是否已安装。
 
-**支持的输入格式：**
-```bash
-/home/user/tools/ccr               # 绝对路径
-~/my-tools/ccr                     # 波浪号展开
-./local/ccr                        # 相对路径
-$HOME/custom/path                  # 环境变量（通过 eval）
-```
+#### 步骤 3: 选择离线包
 
-#### 步骤 3: 选择压缩包
-
-脚本自动在 `packages/` 目录查找：
-
-**支持的文件名模式：**
-- `claude-code-router-*.tar.gz`
-- `claude-code-router-*.tar.xz`
-- `claude-code-router-*.zip`
-- `musistudio-claude-code-router-*.tgz`
-- `musistudio-claude-code-router-*.tar.gz`
-- `ccr-*.tar.gz`
-- 等等
-
-**自动选择逻辑：**
-1. 在 `packages/` 及其子目录中搜索
-2. 按日期倒序排列（最新优先）
-3. 提示用户使用找到的最新版本
+脚本自动在 `packages/` 目录查找 `musistudio-claude-code-router-*.tgz` 文件，
+用户也可手动输入路径。
 
 #### 步骤 4: 确认安装信息
 
-显示要安装的源包和目标路径，最后确认
+显示离线包路径和安装命令，最后确认。
 
-#### 步骤 5-9: 自动安装
+#### 步骤 5: 执行 npm 安装
 
-执行以下自动化步骤：
+```bash
+npm install -g "<path/to/musistudio-claude-code-router-*.tgz>"
+```
 
-1. **路径检查** - 如果目标路径存在，询问覆盖
-2. **创建目录** - 创建安装目录
-3. **解压文件** - 支持 tar.gz、tar.xz、.zip 等格式
-4. **复制文件** - 移动解压后的文件到安装目录
-5. **设置权限** - 为可执行文件设置 755，普通文件设置 644
+#### 步骤 6: 验证安装
 
-#### 步骤 10: 完成配置
-
-- 显示 Claude Code Router 版本
-- 询问是否配置环境变量到 ~/.bashrc
-- 提供后续验证命令
+运行 `ccr --version` 确认安装成功。
 
 ### 卸载流程（选项 2）
 
-1. 读取安装记录文件
-2. 验证安装目录存在
-3. 安全检查（防止删除系统目录）
-4. 删除安装目录
-5. 从 `.bashrc` 删除环境变量配置
-
-### 更新配置流程（选项 3）
-
-提供以下操作：
-1. **配置环境变量** - 编辑 `~/.bashrc`
-2. **显示完整配置信息** - 显示版本、路径等
-3. **返回** - 返回主菜单
+```bash
+npm uninstall -g @musistudio/claude-code-router
+```
 
 ---
 

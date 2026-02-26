@@ -146,7 +146,7 @@ prompt_package_path() {
     
     echo ""
     echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│  步骤 2: 选择离线包                │${NC}"
+    echo -e "${CYAN}│  步骤 3: 选择离线包                │${NC}"
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
     
@@ -189,7 +189,7 @@ prompt_package_path() {
 confirm_installation() {
     echo ""
     echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│  步骤 3: 确认安装                  │${NC}"
+    echo -e "${CYAN}│  步骤 4: 确认安装                  │${NC}"
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
     echo -e "  ${YELLOW}离线包:${NC} $PKG_PATH"
@@ -226,7 +226,7 @@ install_router() {
     # 执行 npm install
     echo ""
     echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│  步骤 4: 执行 npm 安装             │${NC}"
+    echo -e "${CYAN}│  步骤 5: 执行 npm 安装             │${NC}"
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
     
@@ -242,7 +242,7 @@ install_router() {
     # 验证安装
     echo ""
     echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│  步骤 5: 验证安装                  │${NC}"
+    echo -e "${CYAN}│  步骤 6: 验证安装                  │${NC}"
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
     
