@@ -245,12 +245,27 @@ install_glibc() {
 
     # 创建软链：$HOME/.glibc/lib -> $target_dir/lib
     mkdir -p "$GLIBC_LINK_DIR"
-    rm -f "$GLIBC_LINK_DIR/lib"
+    if [ -e "$GLIBC_LINK_DIR/lib" ] || [ -L "$GLIBC_LINK_DIR/lib" ]; then
+        if [ -d "$GLIBC_LINK_DIR/lib" ] && [ ! -L "$GLIBC_LINK_DIR/lib" ]; then
+            rm -rf "$GLIBC_LINK_DIR/lib"
+        else
+            rm -f "$GLIBC_LINK_DIR/lib"
+        fi
+    fi
     ln -s "$target_dir/lib" "$GLIBC_LINK_DIR/lib"
     log_info "创建软链: $GLIBC_LINK_DIR/lib -> $target_dir/lib"
 
-    if [ ! -f "$target_dir/lib/ld-linux-x86-64.so.2" ]; then
-        log_error "glibc 目录缺少加载器: $target_dir/lib/ld-linux-x86-64.so.2"
+    local ld_loader
+    case "$(uname -m)" in
+        x86_64)        ld_loader="ld-linux-x86-64.so.2" ;;
+        aarch64|arm64) ld_loader="ld-linux-aarch64.so.1" ;;
+        *)
+            log_error "不支持的架构: $(uname -m)"
+            return 1
+            ;;
+    esac
+    if [ ! -f "$target_dir/lib/$ld_loader" ]; then
+        log_error "glibc 目录缺少加载器: $target_dir/lib/$ld_loader"
         return 1
     fi
 
@@ -282,6 +297,8 @@ main() {
             log_warn "安装已取消"
             exit 1
         fi
+        log_info "清理已存在的安装目录内容..."
+        rm -rf "$INSTALL_BASE/patchelf" "$INSTALL_BASE/glibc-${GLIBC_VERSION}"
     fi
 
     echo ""

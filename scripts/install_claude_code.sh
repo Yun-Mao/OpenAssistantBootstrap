@@ -29,7 +29,11 @@ GLIBC_VERSION="2.31"
 GLIBC_DIR="${PATCH_TOOLS_DIR}/glibc-${GLIBC_VERSION}"
 GLIBC_LINK_DIR="$HOME/.glibc"
 GLIBC_LIB="${GLIBC_LINK_DIR}/lib"
-GLIBC_INTERPRETER="${GLIBC_LIB}/ld-linux-x86-64.so.2"
+case "$(uname -m)" in
+    x86_64)        GLIBC_INTERPRETER="${GLIBC_LIB}/ld-linux-x86-64.so.2" ;;
+    aarch64|arm64) GLIBC_INTERPRETER="${GLIBC_LIB}/ld-linux-aarch64.so.1" ;;
+    *)             GLIBC_INTERPRETER="" ;;
+esac
 PATCHELF_DIR="${PATCH_TOOLS_DIR}/patchelf"
 PATCHELF_BIN="${PATCHELF_DIR}/bin/patchelf"
 CLAUDE_PATCHED="no"
@@ -234,7 +238,13 @@ ensure_glibc() {
 
     # 创建软链：$HOME/.glibc/lib -> $GLIBC_DIR/lib
     mkdir -p "$GLIBC_LINK_DIR"
-    rm -f "$GLIBC_LINK_DIR/lib"
+    if [ -e "$GLIBC_LINK_DIR/lib" ] || [ -L "$GLIBC_LINK_DIR/lib" ]; then
+        if [ -d "$GLIBC_LINK_DIR/lib" ] && [ ! -L "$GLIBC_LINK_DIR/lib" ]; then
+            rm -rf "$GLIBC_LINK_DIR/lib"
+        else
+            rm -f "$GLIBC_LINK_DIR/lib"
+        fi
+    fi
     ln -s "$GLIBC_DIR/lib" "$GLIBC_LINK_DIR/lib"
     log_info "创建软链: $GLIBC_LINK_DIR/lib -> $GLIBC_DIR/lib"
 
@@ -575,8 +585,14 @@ uninstall_claude_code() {
         end_line=$(grep -nF "$end_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
 
         if [[ -n "$start_line" && -n "$end_line" && "$end_line" -ge "$start_line" ]]; then
-            sed -i "${start_line},${end_line}d" "$bash_config"
-            sed -i '/^$/N;/^\n$/D' "$bash_config"
+            local sed_inplace
+            if sed --version >/dev/null 2>&1; then
+                sed_inplace=(-i)
+            else
+                sed_inplace=(-i '')
+            fi
+            sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$bash_config"
+            sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$bash_config"
             log_success "环境变量配置已删除"
             echo ""
             echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
@@ -738,7 +754,7 @@ install_claude_code() {
     log_info "解压文件..."
     local temp_dir
     temp_dir=$(mktemp -d)
-    trap "rm -rf '$temp_dir'" EXIT
+    trap 'rm -rf "$temp_dir"' EXIT
 
     case "$PKG_PATH" in
         *.tar.gz)

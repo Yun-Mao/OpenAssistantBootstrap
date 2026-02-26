@@ -240,7 +240,7 @@ download_and_verify() {
     # 创建临时工作目录
     local work_dir
     work_dir=$(mktemp -d)
-    trap "rm -rf '$work_dir'" EXIT
+    trap 'rm -rf "$work_dir"' EXIT
 
     local binary_file="$work_dir/claude"
 
