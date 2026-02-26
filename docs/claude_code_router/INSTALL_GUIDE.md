@@ -269,7 +269,7 @@ echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
 # Csh/Tcsh:
-echo 'setenv PATH "$(npm bin -g):$PATH"' >> ~/.cshrc
+echo 'setenv PATH "`npm bin -g`:$PATH"' >> ~/.cshrc
 source ~/.cshrc
 ```
 
@@ -367,7 +367,7 @@ echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
 # Csh/Tcsh:
-echo 'setenv PATH "$(npm bin -g):$PATH"' >> ~/.cshrc
+echo 'setenv PATH "`npm bin -g`:$PATH"' >> ~/.cshrc
 source ~/.cshrc
 ```
 

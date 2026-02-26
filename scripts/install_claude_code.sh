@@ -601,14 +601,14 @@ uninstall_claude_code() {
             else
                 sed_inplace=(-i '')
             fi
-            sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$bash_config"
-            sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$bash_config"
-
-            log_success "Bash 环境变量配置已删除"
-            echo ""
-            echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
-            echo "  source ~/.bashrc"
-            deleted_any=true
+            if sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$bash_config" && \
+               sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$bash_config"; then
+                log_success "Bash 环境变量配置已删除"
+                echo ""
+                echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+                echo "  source ~/.bashrc"
+                deleted_any=true
+            fi
         else
             log_info "未找到完整的 Bash 环境变量标记块，跳过自动删除"
         fi
