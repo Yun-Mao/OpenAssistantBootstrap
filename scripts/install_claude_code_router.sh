@@ -71,6 +71,7 @@ ${BLUE}=== Claude Code Router 离线安装脚本 ===${NC}
   • 使用 npm install -g 全局安装
   • 无需 root 权限（用户级别全局安装）
   • 简单的安装/卸载管理
+  • 支持 Bash/Zsh 和 Csh/Tcsh 环境配置
 
 示例:
   ./install_claude_code_router.sh
@@ -274,17 +275,17 @@ uninstall_router() {
     echo -e "${CYAN}║  Claude Code Router 卸载          ║${NC}"
     echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
     echo ""
-    
+
     # 检查是否存在安装
     if ! npm list -g "@musistudio/claude-code-router" &> /dev/null; then
         log_warn "未检测到已安装的 Claude Code Router"
         log_info "可能未通过 npm 安装或已卸载"
         return 1
     fi
-    
+
     local pkg_version
     pkg_version=$(npm list -g "@musistudio/claude-code-router" 2>/dev/null | grep "@musistudio" | head -1 | awk '{print $2}')
-    
+
     echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
     echo -e "${CYAN}│  检测到安装信息                    │${NC}"
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
@@ -292,20 +293,205 @@ uninstall_router() {
     echo -e "  ${YELLOW}包名:${NC} @musistudio/claude-code-router"
     echo -e "  ${YELLOW}版本:${NC} $pkg_version"
     echo ""
-    
+
     if ! confirm_action "确认卸载?"; then
         log_warn "卸载已取消"
         return 1
     fi
-    
+
     log_info "执行: npm uninstall -g @musistudio/claude-code-router"
-    
+
     if npm uninstall -g "@musistudio/claude-code-router" 2>&1 | tee -a "$LOG_FILE"; then
         log_success "Claude Code Router 卸载成功"
     else
         log_error "npm 卸载失败"
         return 1
     fi
+
+    # 删除环境变量配置
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  删除环境变量配置                  │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    local start_marker="# >>> Claude Code Router Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local end_marker="# <<< Claude Code Router Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local deleted_any=false
+
+    # 删除 bash 配置
+    local bash_config="$HOME/.bashrc"
+    if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
+        log_info "检测到 Bash 环境变量配置，正在删除..."
+
+        # 使用行号范围删除标记块（避免 marker 中正则元字符的干扰）
+        local start_line end_line
+        start_line=$(grep -nF "$start_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
+        end_line=$(grep -nF "$end_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
+
+        if [[ -n "$start_line" && -n "$end_line" && "$end_line" -ge "$start_line" ]]; then
+            sed -i "${start_line},${end_line}d" "$bash_config"
+            # 删除可能的多余空行
+            sed -i '/^$/N;/^\n$/D' "$bash_config"
+
+            log_success "Bash 环境变量配置已删除"
+            echo ""
+            echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+            echo "  source ~/.bashrc"
+            deleted_any=true
+        else
+            log_info "未找到完整的 Bash 环境变量标记块，跳过自动删除"
+        fi
+    fi
+
+    # 删除 csh 配置
+    for csh_config in "$HOME/.cshrc" "$HOME/.login"; do
+        if [ -f "$csh_config" ] && grep -Fq "$start_marker" "$csh_config" 2>/dev/null; then
+            log_info "检测到 Csh 环境变量配置在 $csh_config，正在删除..."
+
+            local start_line end_line
+            start_line=$(grep -nF "$start_marker" "$csh_config" | head -n1 | cut -d: -f1 || true)
+            end_line=$(grep -nF "$end_marker" "$csh_config" | head -n1 | cut -d: -f1 || true)
+
+            if [[ -n "$start_line" && -n "$end_line" && "$end_line" -ge "$start_line" ]]; then
+                sed -i "${start_line},${end_line}d" "$csh_config"
+                sed -i '/^$/N;/^\n$/D' "$csh_config"
+
+                log_success "Csh 环境变量配置已从 $csh_config 删除"
+                deleted_any=true
+            else
+                log_info "未找到完整的 Csh 环境变量标记块，跳过自动删除"
+            fi
+        fi
+    done
+
+    if [ "$deleted_any" = false ]; then
+        log_info "未找到自动配置的环境变量"
+        echo ""
+        echo -e "${YELLOW}提示:${NC} 如果您手动配置了环境变量，请手动删除:"
+        echo "  编辑 ~/.bashrc 或 ~/.cshrc，移除包含 npm global bin 的 PATH 配置行"
+    fi
+}
+
+# 检测用户默认 shell
+detect_user_shell() {
+    # 检查 SHELL 环境变量
+    if [ -n "$SHELL" ]; then
+        case "$SHELL" in
+            */csh|*/tcsh)
+                echo "csh"
+                return 0
+                ;;
+            */bash)
+                echo "bash"
+                return 0
+                ;;
+            */zsh)
+                echo "zsh"
+                return 0
+                ;;
+        esac
+    fi
+    # 默认返回 bash
+    echo "bash"
+    return 0
+}
+
+# 配置环境变量到 shell 配置文件
+configure_env_variables() {
+    local npm_bin_dir
+    npm_bin_dir=$(npm bin -g 2>/dev/null)
+
+    if [ -z "$npm_bin_dir" ]; then
+        log_warn "无法获取 npm global bin 目录"
+        return 1
+    fi
+
+    local user_shell
+    user_shell=$(detect_user_shell)
+
+    log_info "检测到当前 shell: $SHELL"
+    log_info "npm global bin 目录: $npm_bin_dir"
+
+    local configured_any=false
+
+    # 配置 bash/zsh
+    local bash_config="$HOME/.bashrc"
+    local bash_start_marker="# >>> Claude Code Router Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local bash_end_marker="# <<< Claude Code Router Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local bash_env_line="export PATH=\"$npm_bin_dir:\$PATH\""
+
+    if [[ "$user_shell" =~ (bash|zsh) ]] || confirm_action "是否配置 bash/zsh 环境变量?"; then
+        # 检查是否已存在配置
+        if grep -Fq "$bash_start_marker" "$bash_config" 2>/dev/null; then
+            log_warn "Bash 环境变量已配置，跳过"
+        else
+            log_info "添加环境变量到 $bash_config"
+
+            # 添加带注释标记的环境变量
+            {
+                echo ""
+                echo "$bash_start_marker"
+                echo "$bash_env_line"
+                echo "$bash_end_marker"
+            } >> "$bash_config"
+
+            log_success "Bash 环境变量已配置"
+            configured_any=true
+        fi
+    fi
+
+    # 配置 csh/tcsh
+    local csh_config="$HOME/.cshrc"
+    local csh_config_user="$HOME/.login"
+    local csh_start_marker="# >>> Claude Code Router Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local csh_end_marker="# <<< Claude Code Router Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local csh_env_line="setenv PATH \"$npm_bin_dir:\$PATH\""
+
+    if [[ "$user_shell" == "csh" ]] || confirm_action "是否配置 csh/tcsh 环境变量?"; then
+        # 优先使用 .cshrc，如果不存在则检查 .login
+        local target_csh_config=""
+        if [ -f "$csh_config" ]; then
+            target_csh_config="$csh_config"
+        elif [ -f "$csh_config_user" ]; then
+            target_csh_config="$csh_config_user"
+        else
+            # 默认使用 .cshrc
+            target_csh_config="$csh_config"
+        fi
+
+        # 检查是否已存在配置
+        if grep -Fq "$csh_start_marker" "$target_csh_config" 2>/dev/null; then
+            log_warn "Csh 环境变量已配置，跳过"
+        else
+            log_info "添加环境变量到 $target_csh_config"
+
+            # 添加带注释标记的环境变量
+            {
+                echo ""
+                echo "$csh_start_marker"
+                echo "$csh_env_line"
+                echo "$csh_end_marker"
+            } >> "$target_csh_config"
+
+            log_success "Csh 环境变量已配置到 $target_csh_config"
+            configured_any=true
+        fi
+    fi
+
+    if [ "$configured_any" = true ]; then
+        echo ""
+        echo -e "${YELLOW}重要提示:${NC}"
+        echo -e "  请勿在以下标记之间添加或修改内容："
+        echo -e "  ${CYAN}$bash_start_marker${NC}"
+        echo -e "  ${CYAN}$bash_end_marker${NC}"
+        echo -e "  ${CYAN}$csh_start_marker${NC}"
+        echo -e "  ${CYAN}$csh_end_marker${NC}"
+        echo -e "  卸载时将自动删除这些标记之间的所有内容"
+        echo ""
+    fi
+
+    return 0
 }
 
 # 显示安装信息
@@ -315,15 +501,43 @@ show_install_info() {
     echo -e "${CYAN}│  安装完成                         │${NC}"
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
-    
+
     log_success "Claude Code Router 已成功安装"
-    
+
     echo ""
     echo -e "${YELLOW}快速开始:${NC}"
     echo "  • 查看版本: ccr --version 或 claude-code-router --version"
     echo "  • 查看帮助: ccr --help 或 claude-code-router --help"
     echo ""
-    
+
+    # 检查命令是否在 PATH 中
+    if ! command -v ccr &>/dev/null && ! command -v claude-code-router &>/dev/null; then
+        local npm_bin_dir
+        npm_bin_dir=$(npm bin -g 2>/dev/null)
+        echo -e "${YELLOW}注意:${NC} npm global bin 目录未在 PATH 中"
+        echo ""
+
+        if confirm_action "是否自动配置环境变量?"; then
+            configure_env_variables
+            echo ""
+            echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+            echo "   Bash/Zsh: source ~/.bashrc"
+            echo "   Csh/Tcsh: source ~/.cshrc"
+            echo ""
+        else
+            echo -e "${YELLOW}手动配置环境变量:${NC}"
+            echo ""
+            echo "   Bash/Zsh:"
+            echo "   echo 'export PATH=\"$npm_bin_dir:\$PATH\"' >> ~/.bashrc"
+            echo "   source ~/.bashrc"
+            echo ""
+            echo "   Csh/Tcsh:"
+            echo "   echo 'setenv PATH \"$npm_bin_dir:\$PATH\"' >> ~/.cshrc"
+            echo "   source ~/.cshrc"
+            echo ""
+        fi
+    fi
+
     echo -e "${YELLOW}安装日志:${NC}"
     echo "  $LOG_FILE"
     echo ""

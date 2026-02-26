@@ -24,6 +24,8 @@ LOG_FILE="/tmp/claude_code_install_$(date +%s).log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_PKG_DIR="${SCRIPT_DIR}/../packages"
 INSTALL_RECORD="$HOME/.claude_code_install_record"
+INSTALL_MODE=""
+NPM_PKG_NAME="@anthropic-ai/claude-code"
 PATCH_TOOLS_DIR="$HOME/.patch-tools"
 GLIBC_VERSION="2.31"
 GLIBC_DIR="${PATCH_TOOLS_DIR}/glibc-${GLIBC_VERSION}"
@@ -350,13 +352,18 @@ ${BLUE}=== Claude Code 离线安装脚本 ===${NC}
 
 描述:
   纯交互式安装脚本，将指引您完成 Claude Code 离线安装过程。
-  无需 root 权限，无需 Node.js，使用官方预编译二进制。
+  支持两种安装模式：独立二进制模式（无需 Node.js）和 npm 模式。
+
+安装模式:
+  1. 独立二进制模式 - 使用官方预编译二进制，无需 Node.js
+  2. npm 全局安装模式 - 使用 npm install -g，需要 Node.js 环境
 
 功能:
   • 检测本地已有的 Claude Code 安装
-  • 交互式输入自定义安装路径
+  • 交互式选择安装模式
   • 自动识别 packages/ 目录中的离线安装包
   • 无需 root 权限，完全用户级别安装
+  • 支持 Bash/Zsh 和 Csh/Tcsh 环境配置
 
 示例:
   ./install_claude_code.sh
@@ -573,13 +580,16 @@ uninstall_claude_code() {
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
 
-    local bash_config="$HOME/.bashrc"
     local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
     local end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local deleted_any=false
 
+    # 删除 bash 配置
+    local bash_config="$HOME/.bashrc"
     if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
-        log_info "检测到环境变量配置，正在删除..."
+        log_info "检测到 Bash 环境变量配置，正在删除..."
 
+        # 使用行号范围删除标记块（避免 marker 中正则元字符的干扰）
         local start_line end_line
         start_line=$(grep -nF "$start_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
         end_line=$(grep -nF "$end_marker" "$bash_config" | head -n1 | cut -d: -f1 || true)
@@ -591,20 +601,51 @@ uninstall_claude_code() {
             else
                 sed_inplace=(-i '')
             fi
-            sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$bash_config"
-            sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$bash_config"
-            log_success "环境变量配置已删除"
-            echo ""
-            echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
-            echo "  source ~/.bashrc"
+            if sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$bash_config" && \
+               sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$bash_config"; then
+                log_success "Bash 环境变量配置已删除"
+                echo ""
+                echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
+                echo "  source ~/.bashrc"
+                deleted_any=true
+            fi
         else
-            log_info "未找到完整的环境变量标记块，跳过自动删除"
+            log_info "未找到完整的 Bash 环境变量标记块，跳过自动删除"
         fi
-    else
+    fi
+
+    # 删除 csh 配置
+    for csh_config in "$HOME/.cshrc" "$HOME/.login"; do
+        if [ -f "$csh_config" ] && grep -Fq "$start_marker" "$csh_config" 2>/dev/null; then
+            log_info "检测到 Csh 环境变量配置在 $csh_config，正在删除..."
+
+            local start_line end_line
+            start_line=$(grep -nF "$start_marker" "$csh_config" | head -n1 | cut -d: -f1 || true)
+            end_line=$(grep -nF "$end_marker" "$csh_config" | head -n1 | cut -d: -f1 || true)
+
+            if [[ -n "$start_line" && -n "$end_line" && "$end_line" -ge "$start_line" ]]; then
+                local sed_inplace
+                if sed --version >/dev/null 2>&1; then
+                    sed_inplace=(-i)
+                else
+                    sed_inplace=(-i '')
+                fi
+                sed "${sed_inplace[@]}" "${start_line},${end_line}d" "$csh_config"
+                sed "${sed_inplace[@]}" '/^$/N;/^\n$/D' "$csh_config"
+
+                log_success "Csh 环境变量配置已从 $csh_config 删除"
+                deleted_any=true
+            else
+                log_info "未找到完整的 Csh 环境变量标记块，跳过自动删除"
+            fi
+        fi
+    done
+
+    if [ "$deleted_any" = false ]; then
         log_info "未找到自动配置的环境变量"
         echo ""
         echo -e "${YELLOW}提示:${NC} 如果您手动配置了环境变量，请手动删除:"
-        echo "  编辑 ~/.bashrc，移除包含 '$INSTALL_PATH' 的 PATH 配置行"
+        echo "  编辑 ~/.bashrc 或 ~/.cshrc，移除包含 '$INSTALL_PATH' 的 PATH 配置行"
     fi
 
     echo ""
@@ -675,10 +716,12 @@ update_config() {
             local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
             if grep -q "$start_marker" "$bash_config" 2>/dev/null; then
                 log_warn "环境变量已经配置过了"
-            elif confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+            elif confirm_action "是否自动配置环境变量?"; then
                 configure_env_variables
+                echo ""
                 echo -e "${YELLOW}请运行以下命令使配置生效:${NC}"
-                echo "  source ~/.bashrc"
+                echo "  Bash/Zsh: source ~/.bashrc"
+                echo "  Csh/Tcsh: source ~/.cshrc"
             fi
             ;;
         2)
@@ -694,7 +737,264 @@ update_config() {
     esac
 }
 
-# ==================== 安装功能 ====================
+# ==================== npm 安装模式功能 ====================
+# 检查 npm 环境要求
+check_npm_prerequisites() {
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  检查 npm 环境要求                │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    # 检查 Node.js
+    if ! command -v node &> /dev/null; then
+        log_error "未找到 Node.js"
+        echo -e "${YELLOW}npm 安装模式需要 Node.js 16.0.0 或更高版本${NC}"
+        echo "  请先安装 Node.js 或选择独立二进制模式"
+        echo "  参考: https://nodejs.org/zh-cn/"
+        return 1
+    fi
+
+    local node_version
+    node_version=$(node --version 2>/dev/null || echo "Unknown")
+    log_success "Node.js 已安装: $node_version"
+
+    # 检查 npm
+    if ! command -v npm &> /dev/null; then
+        log_error "未找到 npm"
+        echo -e "${YELLOW}请先安装 Node.js（npm 包含在 Node.js 中）${NC}"
+        return 1
+    fi
+
+    local npm_version
+    npm_version=$(npm --version 2>/dev/null || echo "Unknown")
+    log_success "npm 已安装: $npm_version"
+
+    echo ""
+    return 0
+}
+
+# 检查现有的 npm 安装
+check_existing_npm_installation() {
+    if npm list -g "$NPM_PKG_NAME" &> /dev/null; then
+        local installed_version
+        installed_version=$(npm list -g "$NPM_PKG_NAME" 2>/dev/null | grep "$NPM_PKG_NAME" | head -1 | awk '{print $2}')
+        log_success "检测到已安装（npm）: $NPM_PKG_NAME@$installed_version"
+        return 0
+    fi
+
+    log_info "未检测到已安装的 Claude Code（npm 模式）"
+    return 1
+}
+
+# 选择 npm 离线包
+prompt_npm_package_path() {
+    local default_pkg=""
+    local user_input=""
+
+    # 在 packages 目录下寻找 Claude Code npm 包
+    if [ -d "$DEFAULT_PKG_DIR" ]; then
+        default_pkg=$(find "$DEFAULT_PKG_DIR" -maxdepth 2 -type f \( \
+            -name "anthropic-claude-code-*.tgz" \
+            -o -name "anthropic-claude-code-*.tar.gz" \
+            -o -name "anthropic-ai-claude-code-*.tgz" \
+        \) 2>/dev/null | sort -rV | head -1)
+    fi
+
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  选择 npm 离线包                   │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    if [ -n "$default_pkg" ]; then
+        echo -e "  ${YELLOW}找到离线包:${NC}"
+        echo "    $(basename "$default_pkg")"
+        read -p "  使用此文件? (Y/n): " -n 1 -r user_input
+        echo
+
+        if [[ -z "$user_input" || $user_input =~ ^[Yy]$ ]]; then
+            PKG_PATH="$default_pkg"
+            log_info "使用离线包: $(basename "$default_pkg")"
+            return 0
+        fi
+    fi
+
+    echo -e "  ${YELLOW}包目录:${NC} $DEFAULT_PKG_DIR"
+    echo -e "  ${YELLOW}提示:${NC} 请先在有网络的机器上运行 pack_claude_code_npm.sh 获取离线包"
+    read -p "  输入离线包路径: " user_input
+
+    if [ -z "$user_input" ]; then
+        log_error "必须指定离线包路径"
+        return 1
+    fi
+
+    PKG_PATH="$user_input"
+
+    # 展开波浪号
+    PKG_PATH="${PKG_PATH/#\~/$HOME}"
+
+    if [ ! -f "$PKG_PATH" ]; then
+        log_error "文件不存在: $PKG_PATH"
+        return 1
+    fi
+
+    log_info "使用离线包: $PKG_PATH"
+    return 0
+}
+
+# 确认 npm 安装
+confirm_npm_installation() {
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  确认 npm 安装                     │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "  ${YELLOW}离线包:${NC} $PKG_PATH"
+    echo -e "  ${YELLOW}安装方式:${NC} npm install -g <package>"
+    echo ""
+
+    if ! confirm_action "确认开始安装?"; then
+        log_warn "安装已取消"
+        return 1
+    fi
+
+    return 0
+}
+
+# npm 安装 Claude Code
+install_claude_code_npm() {
+    if [ -z "$PKG_PATH" ]; then
+        log_error "必须指定离线包路径"
+        return 1
+    fi
+
+    if [ ! -f "$PKG_PATH" ]; then
+        log_error "离线包不存在: $PKG_PATH"
+        return 1
+    fi
+
+    if ! confirm_npm_installation; then
+        return 1
+    fi
+
+    log_info "开始通过 npm 安装 Claude Code..."
+
+    # 执行 npm install
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  执行 npm 安装                      │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    log_info "执行: npm install -g \"$PKG_PATH\""
+
+    if npm install -g "$PKG_PATH" 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "npm 安装完成"
+    else
+        log_error "npm 安装失败"
+        return 1
+    fi
+
+    # 验证安装
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  验证安装                           │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    if command -v claude &> /dev/null; then
+        local claude_version
+        claude_version=$(claude --version 2>/dev/null || echo "Unknown")
+        log_success "Claude Code 已安装成功"
+        log_success "版本: $claude_version"
+
+        # 保存安装记录（标记为 npm 模式）
+        echo "npm" > "$INSTALL_RECORD"
+        echo "$NPM_PKG_NAME" >> "$INSTALL_RECORD"
+        log_info "安装记录已保存到: $INSTALL_RECORD"
+    else
+        log_warn "安装验证失败：找不到 claude 命令"
+        log_warn "请检查 npm global bin 目录是否在 PATH 中"
+        echo ""
+        echo -e "${YELLOW}查看 npm 全局 bin 目录:${NC}"
+        echo "  npm bin -g"
+        echo ""
+        echo -e "${YELLOW}如果需要，将其添加到 PATH:${NC}"
+        echo "  echo 'export PATH=\"\$(npm bin -g):\$PATH\"' >> ~/.bashrc"
+        echo "  source ~/.bashrc"
+        echo ""
+        return 1
+    fi
+
+    # 显示后续信息
+    show_npm_install_info
+}
+
+# 显示 npm 安装完成信息
+show_npm_install_info() {
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  安装完成                           │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+
+    log_success "Claude Code 已成功安装（npm 模式）"
+
+    echo ""
+    echo -e "${YELLOW}快速开始:${NC}"
+    echo "  • 查看版本: claude --version"
+    echo "  • 查看帮助: claude --help"
+    echo ""
+
+    echo -e "${YELLOW}安装日志:${NC}"
+    echo "  $LOG_FILE"
+    echo ""
+}
+
+# npm 卸载 Claude Code
+uninstall_claude_code_npm() {
+    echo ""
+    echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║  Claude Code 卸载（npm 模式）      ║${NC}"
+    echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+    echo ""
+
+    # 检查是否存在安装
+    if ! npm list -g "$NPM_PKG_NAME" &> /dev/null; then
+        log_warn "未检测到已安装的 Claude Code（npm 模式）"
+        log_info "可能未通过 npm 安装或已卸载"
+        return 1
+    fi
+
+    local pkg_version
+    pkg_version=$(npm list -g "$NPM_PKG_NAME" 2>/dev/null | grep "claude-code" | head -1 | awk '{print $2}')
+
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  检测到安装信息                    │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "  ${YELLOW}包名:${NC} $NPM_PKG_NAME"
+    echo -e "  ${YELLOW}版本:${NC} $pkg_version"
+    echo ""
+
+    if ! confirm_action "确认卸载?"; then
+        log_warn "卸载已取消"
+        return 1
+    fi
+
+    log_info "执行: npm uninstall -g $NPM_PKG_NAME"
+
+    if npm uninstall -g "$NPM_PKG_NAME" 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "Claude Code 卸载成功"
+        rm -f "$INSTALL_RECORD"
+    else
+        log_error "npm 卸载失败"
+        return 1
+    fi
+}
+
+# ==================== 安装功能（独立二进制模式） ====================
 install_claude_code() {
     if [ -z "$INSTALL_PATH" ]; then
         log_error "必须指定安装路径"
@@ -828,35 +1128,116 @@ install_claude_code() {
     show_install_info
 }
 
-# 配置环境变量到 bashrc
-configure_env_variables() {
-    local bash_config="$HOME/.bashrc"
-    local start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
-    local end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
-    local env_line="export PATH=\"$INSTALL_PATH/bin:\$PATH\""
+# 检测用户默认 shell
+detect_user_shell() {
+    # 检查 SHELL 环境变量
+    if [ -n "$SHELL" ]; then
+        case "$SHELL" in
+            */csh|*/tcsh)
+                echo "csh"
+                return 0
+                ;;
+            */bash)
+                echo "bash"
+                return 0
+                ;;
+            */zsh)
+                echo "zsh"
+                return 0
+                ;;
+        esac
+    fi
+    # 默认返回 bash
+    echo "bash"
+    return 0
+}
 
-    if grep -Fq "$start_marker" "$bash_config" 2>/dev/null; then
-        log_warn "环境变量已配置，跳过"
-        return 0
+# 配置环境变量到 shell 配置文件
+configure_env_variables() {
+    local user_shell
+    user_shell=$(detect_user_shell)
+
+    log_info "检测到当前 shell: $SHELL"
+
+    local configured_any=false
+
+    # 配置 bash/zsh
+    local bash_config="$HOME/.bashrc"
+    local bash_start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local bash_end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local bash_env_line="export PATH=\"$INSTALL_PATH/bin:\$PATH\""
+
+    if [[ "$user_shell" =~ (bash|zsh) ]] || confirm_action "是否配置 bash/zsh 环境变量?"; then
+        # 检查是否已存在配置
+        if grep -Fq "$bash_start_marker" "$bash_config" 2>/dev/null; then
+            log_warn "Bash 环境变量已配置，跳过"
+        else
+            log_info "添加环境变量到 $bash_config"
+
+            # 添加带注释标记的环境变量
+            {
+                echo ""
+                echo "$bash_start_marker"
+                echo "$bash_env_line"
+                echo "$bash_end_marker"
+            } >> "$bash_config"
+
+            log_success "Bash 环境变量已配置"
+            configured_any=true
+        fi
     fi
 
-    log_info "添加环境变量到 $bash_config"
+    # 配置 csh/tcsh
+    local csh_config="$HOME/.cshrc"
+    local csh_config_user="$HOME/.login"
+    local csh_start_marker="# >>> Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS >>>"
+    local csh_end_marker="# <<< Claude Code Environment Variables - DO NOT EDIT BETWEEN MARKERS <<<"
+    local csh_env_line="setenv PATH \"$INSTALL_PATH/bin:\$PATH\""
 
-    {
+    if [[ "$user_shell" == "csh" ]] || confirm_action "是否配置 csh/tcsh 环境变量?"; then
+        # 优先使用 .cshrc，如果不存在则检查 .login
+        local target_csh_config=""
+        if [ -f "$csh_config" ]; then
+            target_csh_config="$csh_config"
+        elif [ -f "$csh_config_user" ]; then
+            target_csh_config="$csh_config_user"
+        else
+            # 默认使用 .cshrc
+            target_csh_config="$csh_config"
+        fi
+
+        # 检查是否已存在配置
+        if grep -Fq "$csh_start_marker" "$target_csh_config" 2>/dev/null; then
+            log_warn "Csh 环境变量已配置，跳过"
+        else
+            log_info "添加环境变量到 $target_csh_config"
+
+            # 添加带注释标记的环境变量
+            {
+                echo ""
+                echo "$csh_start_marker"
+                echo "$csh_env_line"
+                echo "$csh_end_marker"
+            } >> "$target_csh_config"
+
+            log_success "Csh 环境变量已配置到 $target_csh_config"
+            configured_any=true
+        fi
+    fi
+
+    if [ "$configured_any" = true ]; then
         echo ""
-        echo "$start_marker"
-        echo "$env_line"
-        echo "$end_marker"
-    } >> "$bash_config"
+        echo -e "${YELLOW}重要提示:${NC}"
+        echo -e "  请勿在以下标记之间添加或修改内容："
+        echo -e "  ${CYAN}$bash_start_marker${NC}"
+        echo -e "  ${CYAN}$bash_end_marker${NC}"
+        echo -e "  ${CYAN}$csh_start_marker${NC}"
+        echo -e "  ${CYAN}$csh_end_marker${NC}"
+        echo -e "  卸载时将自动删除这些标记之间的所有内容"
+        echo ""
+    fi
 
-    log_success "环境变量已配置"
-    echo ""
-    echo -e "${YELLOW}重要提示:${NC}"
-    echo -e "  请勿在以下标记之间添加或修改内容："
-    echo -e "  ${CYAN}$start_marker${NC}"
-    echo -e "  ${CYAN}$end_marker${NC}"
-    echo -e "  卸载时将自动删除这些标记之间的所有内容"
-    echo ""
+    return 0
 }
 
 # 显示安装信息
@@ -892,22 +1273,68 @@ show_install_info() {
     echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
     echo ""
 
-    if confirm_action "是否自动配置环境变量到 ~/.bashrc?"; then
+    if confirm_action "是否自动配置环境变量?"; then
         configure_env_variables
+        echo ""
         echo -e "${YELLOW}请执行以下命令使配置生效:${NC}"
-        echo "   source ~/.bashrc"
+        echo "   Bash/Zsh: source ~/.bashrc"
+        echo "   Csh/Tcsh: source ~/.cshrc"
         echo ""
     else
         echo -e "${YELLOW}手动配置环境变量:${NC}"
+        echo ""
+        echo "   Bash/Zsh:"
         echo "   echo 'export PATH=\"$INSTALL_PATH/bin:\$PATH\"' >> ~/.bashrc"
         echo "   source ~/.bashrc"
+        echo ""
+        echo "   Csh/Tcsh:"
+        echo "   echo 'setenv PATH \"$INSTALL_PATH/bin:\$PATH\"' >> ~/.cshrc"
+        echo "   source ~/.cshrc"
         echo ""
     fi
 
     echo -e "${YELLOW}验证安装:${NC}"
-    echo "   source ~/.bashrc"
     echo "   claude --version"
     echo ""
+}
+
+# 选择安装模式
+prompt_install_mode() {
+    echo ""
+    echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│  选择安装模式                      │${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "${YELLOW}Claude Code 支持两种安装模式:${NC}"
+    echo ""
+    echo "  1. 独立二进制模式（推荐）"
+    echo "     • 无需 Node.js，使用官方预编译二进制"
+    echo "     • 安装到自定义目录"
+    echo "     • 支持低版本系统的 glibc patch"
+    echo ""
+    echo "  2. npm 全局安装模式"
+    echo "     • 需要 Node.js 16+ 环境"
+    echo "     • 通过 npm 全局安装"
+    echo "     • 与 Node.js 生态系统集成"
+    echo ""
+
+    read -p "  请选择安装模式 (1/2, 默认 1): " mode_choice
+    echo ""
+
+    case "$mode_choice" in
+        2)
+            INSTALL_MODE="npm"
+            log_info "选择安装模式: npm 全局安装"
+            ;;
+        ""|1)
+            INSTALL_MODE="binary"
+            log_info "选择安装模式: 独立二进制"
+            ;;
+        *)
+            log_warn "无效选择，使用默认模式: 独立二进制"
+            INSTALL_MODE="binary"
+            ;;
+    esac
 }
 
 # ==================== 主函数 ====================
@@ -937,23 +1364,73 @@ main() {
 
     case "$mode_choice" in
         1)
-            echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
-            echo -e "${CYAN}║  Claude Code 离线安装 - 交互式模式 ║${NC}"
-            echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+            # 选择安装模式
+            prompt_install_mode
 
-            if ! prompt_existing_install; then
-                exit 1
+            if [ "$INSTALL_MODE" = "npm" ]; then
+                # ========== npm 安装模式 ==========
+                echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+                echo -e "${CYAN}║  Claude Code 安装 - npm 模式      ║${NC}"
+                echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+
+                # 检查 npm 环境
+                if ! check_npm_prerequisites; then
+                    exit 1
+                fi
+
+                # 检查现有安装
+                echo ""
+                echo -e "${CYAN}┌─────────────────────────────────────┐${NC}"
+                echo -e "${CYAN}│  检查现有安装                      │${NC}"
+                echo -e "${CYAN}└─────────────────────────────────────┘${NC}"
+                echo ""
+
+                if check_existing_npm_installation; then
+                    echo ""
+                    if ! confirm_action "已安装，是否继续安装新版本?"; then
+                        log_warn "安装已取消"
+                        exit 1
+                    fi
+                fi
+
+                # 选择离线包
+                if ! prompt_npm_package_path; then
+                    exit 1
+                fi
+
+                # 执行安装
+                if ! install_claude_code_npm; then
+                    exit 1
+                fi
+            else
+                # ========== 独立二进制安装模式 ==========
+                echo -e "${CYAN}╔═════════════════════════════════════╗${NC}"
+                echo -e "${CYAN}║  Claude Code 安装 - 独立二进制    ║${NC}"
+                echo -e "${CYAN}╚═════════════════════════════════════╝${NC}"
+
+                if ! prompt_existing_install; then
+                    exit 1
+                fi
+
+                prompt_install_path
+
+                if ! prompt_package_path; then
+                    exit 1
+                fi
+
+                install_claude_code
             fi
-
-            prompt_install_path
-
-            if ! prompt_package_path; then
-                exit 1
-            fi
-
-            install_claude_code
             ;;
         2)
+            # 卸载模式 - 需要检测是哪种安装方式
+            if [ -f "$INSTALL_RECORD" ]; then
+                local first_line
+                first_line=$(head -1 "$INSTALL_RECORD" 2>/dev/null || echo "")
+                if [ "$first_line" = "npm" ]; then
+                    uninstall_claude_code_npm
+                    exit 0
+                fi
+            fi
             uninstall_claude_code
             ;;
         3)
