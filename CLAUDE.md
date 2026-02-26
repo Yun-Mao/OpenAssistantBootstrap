@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 scripts/          # Installation scripts (one per tool)
-packages/         # Drop offline tarballs here (gitignored)
+packages/         # Drop offline tarballs here (tarballs are gitignored)
 docs/<tool>/      # Per-tool documentation
 .github/          # Git workflow automation
 ```
